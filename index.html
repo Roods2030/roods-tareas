@@ -10,6 +10,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Custom Style -->
     <link rel="stylesheet" href="style.css">
+    <!-- PWA Support -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/jpeg" href="logo.jpg">
+    <meta name="theme-color" content="#E91E63">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="logo.jpg">
 </head>
 <body>
     <!-- Background Blurs -->
@@ -20,8 +27,11 @@
         <!-- HEADER -->
         <header class="main-header">
             <div class="logo-container">
-                <span class="brand-name">ROODS</span>
-                <span class="tagline">Tareas & Turnos</span>
+                <img src="logo.jpg" alt="ROODS Estar al 100" class="logo-img">
+                <div class="logo-text-group">
+                    <span class="brand-name">ROODS</span>
+                    <span class="tagline">Tareas & Turnos</span>
+                </div>
             </div>
             <div id="syncIndicator" class="sync-indicator">Sincronizado Local</div>
         </header>
@@ -469,5 +479,15 @@
 
     <!-- Application Script -->
     <script src="app.js"></script>
+    <!-- PWA Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then((reg) => console.log('Service Worker registrado con éxito:', reg.scope))
+                    .catch((err) => console.error('Error al registrar Service Worker:', err));
+            });
+        }
+    </script>
 </body>
 </html>

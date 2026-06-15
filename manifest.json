@@ -1,0 +1,17 @@
+{
+  "name": "Roods Tareas y Turnos",
+  "short_name": "Roods Tareas",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fce4ec",
+  "theme_color": "#E91E63",
+  "description": "Gestor de Tareas y Turnos ROODS",
+  "icons": [
+    {
+      "src": "logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}
