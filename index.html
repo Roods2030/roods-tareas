@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROODS - Tareas y Turnos</title>
+    <!-- Outfit Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Background Blurs -->
+    <div class="bg-blur blur-1"></div>
+    <div class="bg-blur blur-2"></div>
+
+    <div class="app-container">
+        <!-- HEADER -->
+        <header class="main-header">
+            <div class="logo-container">
+                <span class="brand-name">ROODS</span>
+                <span class="tagline">Tareas & Turnos</span>
+            </div>
+            <div id="syncIndicator" class="sync-indicator">Sincronizado Local</div>
+        </header>
+
+        <!-- SECTION: LOGIN PIN -->
+        <section id="loginSection" class="section active">
+            <div class="card glass login-card">
+                <h2>Ingreso de Personal</h2>
+                <p class="subtitle">Introduce tu PIN para acceder a tus tareas del día</p>
+                
+                <div class="pin-display">
+                    <div class="pin-dot" id="dot1"></div>
+                    <div class="pin-dot" id="dot2"></div>
+                    <div class="pin-dot" id="dot3"></div>
+                    <div class="pin-dot" id="dot4"></div>
+                    <div class="pin-dot" id="dot5"></div>
+                    <div class="pin-dot" id="dot6"></div>
+                </div>
+
+                <div class="pin-pad">
+                    <button class="pin-btn" onclick="pressPin('1')">1</button>
+                    <button class="pin-btn" onclick="pressPin('2')">2</button>
+                    <button class="pin-btn" onclick="pressPin('3')">3</button>
+                    <button class="pin-btn" onclick="pressPin('4')">4</button>
+                    <button class="pin-btn" onclick="pressPin('5')">5</button>
+                    <button class="pin-btn" onclick="pressPin('6')">6</button>
+                    <button class="pin-btn" onclick="pressPin('7')">7</button>
+                    <button class="pin-btn" onclick="pressPin('8')">8</button>
+                    <button class="pin-btn" onclick="pressPin('9')">9</button>
+                    <button class="pin-btn danger-btn" onclick="clearPin()">C</button>
+                    <button class="pin-btn" onclick="pressPin('0')">0</button>
+                    <button class="pin-btn action-btn" onclick="backspacePin()">⌫</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: EMPLOYEE DASHBOARD -->
+        <section id="employeeSection" class="section">
+            <div class="card glass dashboard-card">
+                <!-- User Info Bar -->
+                <div class="user-info-bar">
+                    <div>
+                        <h2 id="employeeWelcome">¡Hola, Empleado!</h2>
+                        <div class="user-role-badge">
+                            <span id="employeeRole">Barista + Cajera</span>
+                            <span id="employeeShift">Turno Matutino</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span id="employeeDate" class="date-label">Miércoles, 5 de Jun</span>
+                        <div class="status-indicator-dot" id="attendanceStatusDot"></div>
+                    </div>
+                </div>
+
+                <!-- Clock-in/out Checador Card -->
+                <div class="checador-card">
+                    <div class="digital-clock" id="digitalClock">17:25:30</div>
+                    <div class="checador-actions">
+                        <button id="btnCheckIn" class="btn-primary" onclick="performCheckIn()">Checar Entrada 📥</button>
+                        <button id="btnCheckOut" class="btn-secondary hidden" onclick="performCheckOut()">Checar Salida 📤</button>
+                    </div>
+                    <p id="attendanceMessage" class="attendance-message">Por favor checa tu entrada para ver tus tareas.</p>
+                </div>
+
+                <!-- Tareas Container (Only visible when checked in) -->
+                <div id="tasksContainer" class="tasks-container locked">
+                    <div class="lock-overlay" id="lockOverlay">
+                        <div class="lock-content">
+                            <span class="lock-icon">🔒</span>
+                            <p>Checa tu entrada para desbloquear tus tareas de hoy</p>
+                        </div>
+                    </div>
+
+                    <!-- Progress Summary -->
+                    <div class="progress-summary">
+                        <div class="progress-text-container">
+                            <span class="progress-title">Progreso de Tareas</span>
+                            <span class="progress-percent" id="tasksPercentText">0%</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="tasksProgressBar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Task Tabs -->
+                    <div class="tab-navigation">
+                        <button class="tab-btn active" id="tabMisTareas" onclick="switchTaskTab('mis-tareas')">Mis Tareas</button>
+                        <button class="tab-btn" id="tabColaborativas" onclick="switchTaskTab('colaborativas')">Tareas Turno</button>
+                    </div>
+
+                    <!-- Task Lists -->
+                    <div class="tab-content active" id="contentMisTareas">
+                        <div class="task-list" id="myTasksList">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                    <div class="tab-content" id="contentColaborativas">
+                        <div class="task-list" id="collabTasksList">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Swap Shift Request Button -->
+                    <div class="swap-trigger-container">
+                        <button class="btn-outline-full" onclick="openSwapModal()">Solicitar Cambio de Turno/Rol 🔄</button>
+                    </div>
+                </div>
+
+                <!-- Footer / Logout -->
+                <div class="dashboard-footer">
+                    <button class="btn-back" onclick="logout()">Cerrar Sesión 🚪</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: HR ADMIN CONSOLE -->
+        <section id="adminSection" class="section">
+            <div class="card glass admin-card">
+                <div class="admin-header">
+                    <h2>Consola de Administración RH</h2>
+                    <button class="btn-back" onclick="logout()">Cerrar Sesión 🚪</button>
+                </div>
+
+                <!-- Admin Tab Navigation -->
+                <div class="tab-navigation admin-nav">
+                    <button class="tab-btn active" id="tabMonitoreo" onclick="switchAdminTab('monitoreo')">Monitoreo</button>
+                    <button class="tab-btn" id="tabAsistencia" onclick="switchAdminTab('asistencia')">Asistencia</button>
+                    <button class="tab-btn" id="tabRoles" onclick="switchAdminTab('roles')">Roles Semanales</button>
+                    <button class="tab-btn" id="tabSwaps" onclick="switchAdminTab('swaps')">Cambios <span class="badge hidden" id="swapsBadge">0</span></button>
+                    <button class="tab-btn" id="tabTareasCsv" onclick="switchAdminTab('tareas-csv')">Tareas CSV</button>
+                    <button class="tab-btn" id="tabEmpleados" onclick="switchAdminTab('empleados')">Empleados</button>
+                </div>
+
+                <!-- ADMIN TAB CONTENT: MONITOREO -->
+                <div class="tab-content admin-content active" id="adminContentMonitoreo">
+                    <div style="display: grid; grid-template-columns: 2.2fr 1.2fr; gap: 20px; align-items: start;">
+                        <div>
+                            <h3>Progreso Operativo de Hoy</h3>
+                            <div class="monitoreo-grid" id="monitoreoGrid">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                        
+                        <!-- WIDGET: ENVIAR TAREA DE URGENCIA -->
+                        <div class="card glass" style="padding: 20px; border-radius: var(--border-radius-medium); border: 1px solid rgba(255,255,255,0.2); background: rgba(255, 255, 255, 0.45);">
+                            <h4 style="margin-bottom: 5px; color: #d81b60; display: flex; align-items: center; gap: 8px; font-size: 1.1rem; font-weight: 800;">
+                                <span>🚨</span> Enviar Tarea de Urgencia
+                            </h4>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Se notificará instantáneamente a los empleados activos en pantalla.</p>
+                            
+                            <form id="urgentTaskForm" onsubmit="sendUrgentTask(event)">
+                                <div class="form-group" style="margin-bottom: 12px;">
+                                    <label for="urgentTaskText" style="font-size: 0.75rem; font-weight:700;">Mensaje / Tarea:</label>
+                                    <input type="text" id="urgentTaskText" required class="form-control" placeholder="Ej. Mover mesas por la lluvia" style="padding: 8px 12px; font-size: 0.9rem;">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 12px;">
+                                    <label for="urgentTaskTarget" style="font-size: 0.75rem; font-weight:700;">Destinatario:</label>
+                                    <select id="urgentTaskTarget" class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
+                                        <option value="Todos">Todos los activos</option>
+                                        <option value="Cajera">Rol: Cajera</option>
+                                        <option value="Barista">Rol: Barista</option>
+                                        <option value="Cocina">Rol: Cocina</option>
+                                        <option value="Apoyo">Rol: Apoyo</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 15px;">
+                                    <label for="urgentTaskShift" style="font-size: 0.75rem; font-weight:700;">Turno:</label>
+                                    <select id="urgentTaskShift" class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
+                                        <option value="Ambos">Ambos turnos</option>
+                                        <option value="Matutino">Turno Matutino</option>
+                                        <option value="Vespertino">Turno Vespertino</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn-submit" style="margin-top: 0; padding: 10px; font-size: 0.9rem;">Enviar Tarea ⚡</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ADMIN TAB CONTENT: ASISTENCIA -->
+                <div class="tab-content admin-content" id="adminContentAsistencia">
+                    <h3>Registro de Asistencia (Entradas y Salidas)</h3>
+                    <div class="search-box">
+                        <input type="text" id="attendanceSearch" placeholder="Filtrar por empleado..." oninput="renderAdminAttendance()">
+                    </div>
+                    <div class="table-container">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Empleado</th>
+                                    <th>Fecha</th>
+                                    <th>Hora</th>
+                                    <th>Tipo</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendanceTableBody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ADMIN TAB CONTENT: ROLES SEMANALES -->
+                <div class="tab-content admin-content" id="adminContentRoles">
+                    <div class="flex-header">
+                        <h3>Programación de Roles Semanales</h3>
+                        <div class="week-selector-container">
+                            <button class="btn-small" onclick="adjustRoleWeek(-7)">◀</button>
+                            <span id="roleWeekLabel" class="bold-label">Semana del Miércoles...</span>
+                            <button class="btn-small" onclick="adjustRoleWeek(7)">▶</button>
+                        </div>
+                    </div>
+                    <p class="help-text">El ciclo semanal va de Miércoles a Lunes. Los Martes son de descanso.</p>
+                    
+                    <div class="roles-manager-grid">
+                        <div class="role-column">
+                            <h4>Turno Matutino (2 Empleados)</h4>
+                            <div class="form-group">
+                                <label for="roleMatutino1">Empleado 1 (Barista + Cajera):</label>
+                                <select id="roleMatutino1" class="form-control" onchange="saveWeeklyRoles()"></select>
+                            </div>
+                            <div class="form-group">
+                                <label for="roleMatutino2">Empleado 2 (Cocina):</label>
+                                <select id="roleMatutino2" class="form-control" onchange="saveWeeklyRoles()"></select>
+                            </div>
+                        </div>
+                        <div class="role-column">
+                            <h4>Turno Vespertino (3 Empleados)</h4>
+                            <div class="form-group">
+                                <label for="roleVespertinoCajera">Cajera:</label>
+                                <select id="roleVespertinoCajera" class="form-control" onchange="saveWeeklyRoles()"></select>
+                            </div>
+                            <div class="form-group">
+                                <label for="roleVespertinoBarista">Barista:</label>
+                                <select id="roleVespertinoBarista" class="form-control" onchange="saveWeeklyRoles()"></select>
+                            </div>
+                            <div class="form-group">
+                                <label for="roleVespertinoCocina">Cocina:</label>
+                                <select id="roleVespertinoCocina" class="form-control" onchange="saveWeeklyRoles()"></select>
+                            </div>
+                        </div>
+                        <div class="role-column">
+                            <h4>Fin de Semana (Apoyo)</h4>
+                            <div class="form-group">
+                                <label for="roleApoyo">Rol de Apoyo (Sáb/Dom):</label>
+                                <select id="roleApoyo" class="form-control" onchange="saveWeeklyRoles()"></select>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="save-status" id="rolesSaveStatus">Roles guardados automáticamente 💾</p>
+                </div>
+
+                <!-- ADMIN TAB CONTENT: SOLICITUDES DE CAMBIOS -->
+                <div class="tab-content admin-content" id="adminContentSwaps">
+                    <h3>Solicitudes de Intercambio de Turno / Rol</h3>
+                    <div class="swaps-list" id="adminSwapsList">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- ADMIN TAB CONTENT: TAREAS CSV -->
+                <div class="tab-content admin-content" id="adminContentTareasCsv">
+                    <div class="flex-header">
+                        <h3>Gestión y Editor de Tareas Base</h3>
+                        <button class="btn-primary" onclick="openTaskTemplateModal()">Agregar Nueva Tarea ➕</button>
+                    </div>
+                    <p class="description">Administra las tareas base directamente en la tabla o expórtalas/impórtalas en formato CSV si prefieres hojas de cálculo.</p>
+                    
+                    <div class="csv-actions-box" style="margin-top: 15px;">
+                        <button class="btn-small" onclick="downloadTemplateCsv()">Descargar Plantilla CSV 📥</button>
+                        <div class="file-upload-wrapper">
+                            <label for="importCsvFile" class="btn-small btn-outline" style="padding: 6px 12px; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(0,0,0,0.1);">Importar Archivo CSV 📤</label>
+                            <input type="file" id="importCsvFile" accept=".csv" class="hidden-file-input" onchange="importCsv(event)">
+                        </div>
+                    </div>
+                    <div class="table-container" style="max-height: 450px; overflow-y: auto;">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Tarea</th>
+                                    <th>Rol</th>
+                                    <th>Turno</th>
+                                    <th>Días Activos</th>
+                                    <th>Imprescindible</th>
+                                    <th>Subtareas</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="taskPreviewBody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ADMIN TAB CONTENT: EMPLEADOS -->
+                <div class="tab-content admin-content" id="adminContentEmpleados">
+                    <div class="flex-header">
+                        <h3>Gestión de Empleados</h3>
+                        <button class="btn-primary btn-small" onclick="openAddEmployeeModal()">Agregar Empleado 👤</button>
+                    </div>
+                    <div class="table-container">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>PIN de Ingreso</th>
+                                    <th>Tipo de Usuario</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employeesTableBody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- MODAL: SWAP SHIFT REQUEST -->
+    <div id="swapModal" class="modal hidden">
+        <div class="modal-content card glass">
+            <button class="btn-close" onclick="closeSwapModal()">×</button>
+            <h3>Solicitar Cambio de Turno/Rol</h3>
+            <p class="subtitle">Selecciona la fecha y el compañero que te cubrirá. Tu solicitud deberá ser autorizada por RH.</p>
+            <form id="swapForm" onsubmit="submitSwapRequest(event)">
+                <div class="form-group">
+                    <label for="swapDate">Fecha del Turno a Cambiar:</label>
+                    <input type="date" id="swapDate" required class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="swapCover">Compañero que te cubrirá:</label>
+                    <select id="swapCover" required class="form-control">
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <button type="submit" class="btn-submit">Enviar Solicitud a RH 🚀</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: ADD EMPLOYEE -->
+    <div id="employeeModal" class="modal hidden">
+        <div class="modal-content card glass">
+            <button class="btn-close" onclick="closeEmployeeModal()">×</button>
+            <h3 id="employeeModalTitle">Agregar Nuevo Empleado</h3>
+            <form id="employeeForm" onsubmit="submitEmployeeForm(event)">
+                <input type="hidden" id="editEmployeeId">
+                <div class="form-group">
+                    <label for="empName">Nombre Completo:</label>
+                    <input type="text" id="empName" required class="form-control" placeholder="Ej. Juan Pérez">
+                </div>
+                <div class="form-group">
+                    <label for="empPin">PIN de Acceso (4 dígitos numéricos):</label>
+                    <input type="text" id="empPin" required pattern="\d{4}" maxlength="4" class="form-control" placeholder="Ej. 1234">
+                </div>
+                <div class="form-group">
+                    <label for="empAdmin">Tipo de Usuario:</label>
+                    <select id="empAdmin" class="form-control">
+                        <option value="false">Empleado Regular</option>
+                        <option value="true">Administrador / RH</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-submit">Guardar Empleado 💾</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: ADD/EDIT TASK TEMPLATE -->
+    <div id="taskTemplateModal" class="modal hidden">
+        <div class="modal-content card glass">
+            <button class="btn-close" onclick="closeTaskTemplateModal()">×</button>
+            <h3 id="taskTemplateModalTitle">Agregar Nueva Tarea</h3>
+            <form id="taskTemplateForm" onsubmit="submitTaskTemplateForm(event)">
+                <input type="hidden" id="editTaskTemplateId">
+                <div class="form-group">
+                    <label for="templateTaskName">Descripción de la Tarea:</label>
+                    <input type="text" id="templateTaskName" required class="form-control" placeholder="Ej. Limpieza de máquina de café">
+                </div>
+                <div class="form-group">
+                    <label for="templateRole">Rol Asignado:</label>
+                    <select id="templateRole" class="form-control">
+                        <option value="Cajera">Cajera</option>
+                        <option value="Barista">Barista</option>
+                        <option value="Cocina">Cocina</option>
+                        <option value="Apoyo">Apoyo</option>
+                        <option value="Colaborativa">Colaborativa (Ambos/Todos)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="templateShift">Turno:</label>
+                    <select id="templateShift" class="form-control">
+                        <option value="Matutino">Matutino</option>
+                        <option value="Vespertino">Vespertino</option>
+                        <option value="Ambos">Ambos</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="templateDays">Días Activos:</label>
+                    <select id="templateDaysSelect" class="form-control" onchange="toggleCustomDaysInput()">
+                        <option value="Todos">Todos</option>
+                        <option value="Lunes-Viernes">Lunes a Viernes</option>
+                        <option value="Fin de Semana">Fin de Semana (Sábado-Domingo)</option>
+                        <option value="Personalizado">Días específicos...</option>
+                    </select>
+                    <input type="text" id="templateCustomDays" class="form-control hidden" style="margin-top: 8px;" placeholder="Ej. Lunes, Miércoles, Viernes">
+                </div>
+                <div class="form-group">
+                    <label for="templateMandatory">¿Es Imprescindible? (Bloquea salida):</label>
+                    <select id="templateMandatory" class="form-control">
+                        <option value="No">No</option>
+                        <option value="Si">Si</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="templateSubtasks">Subtareas (Una por línea, opcional):</label>
+                    <textarea id="templateSubtasks" class="form-control" rows="3" placeholder="Ej.&#10;Vaciar bandeja&#10;Limpiar lanceta&#10;Purgar grupo" style="resize: vertical;"></textarea>
+                </div>
+                <button type="submit" class="btn-submit">Guardar Tarea 💾</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- URGENT ALERT POPUP -->
+    <div id="urgentAlertModal" class="modal hidden" style="z-index: 3000; background: rgba(0,0,0,0.65);">
+        <div class="modal-content card glass" style="max-width: 400px; border: 3px solid #f44336; text-align: center; padding: 30px; animation: pulseBorder 1.5s infinite;">
+            <div style="font-size: 3.5rem; margin-bottom: 15px; animation: bounce 1s infinite;">🚨</div>
+            <h3 style="color: #f44336; font-weight: 800; font-size: 1.4rem; margin-bottom: 10px;">¡TAREA DE URGENCIA!</h3>
+            <p style="font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 20px;">Tu supervisor ha enviado una tarea prioritaria:</p>
+            <div id="urgentAlertTaskText" style="font-size: 1.2rem; font-weight: 700; background: #ffebee; border-left: 5px solid #f44336; padding: 15px; border-radius: var(--border-radius-small); margin-bottom: 25px; color: #b71c1c;">
+                Mover mesas por lluvia
+            </div>
+            <button class="btn-primary" onclick="acknowledgeUrgentAlert()" style="width: 100%; justify-content: center; background: linear-gradient(135deg, #f44336, #d32f2f); box-shadow: 0 8px 20px rgba(244, 67, 54, 0.3); color: white; border: none;">
+                Entendido, lo haré ahora mismo 👍
+            </button>
+        </div>
+    </div>
+
+    <div id="notification" class="notification">
+        <span id="notificationText">Notificación de prueba</span>
+        <button id="notificationClose" class="notification-close-btn" onclick="hideNotification()">✖</button>
+    </div>
+
+    <!-- Application Script -->
+    <script src="app.js"></script>
+</body>
+</html>
