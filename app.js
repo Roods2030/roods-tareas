@@ -600,6 +600,8 @@ function updateAttendanceUI(today, schedules) {
             // Active
             isAnyActive = true;
             activeRolesList = activeRolesList.concat(sched.roles);
+            activeRolesList.push(sched.roleName);
+            activeRolesList.push(sched.roleKey);
             statusText = `<span style="font-size:0.85rem; color:#388E3C; font-weight:700;">🟢 Entrada: ${checkIn.time}</span>`;
             actionBtnHtml = `<button class="btn-secondary" onclick="performCheckOut('${sched.roleKey}')" style="padding: 6px 14px; font-size:0.85rem; border:none; border-radius:8px;">Salida 📤</button>`;
         } else {
@@ -698,7 +700,7 @@ function performCheckOut(roleKey) {
     const empTasks = dailyTasks.filter(d => 
         d.date === todayStr && 
         d.shift === roleInfo.shift && 
-        roleInfo.taskRoles.includes(d.role_name)
+        (roleInfo.taskRoles.includes(d.role_name) || d.role_name === roleInfo.name || d.role_name === roleInfo.key)
     );
     const pendingMandatory = empTasks.filter(t => t.Imprescindible === 'Si' && !t.completed);
     if (pendingMandatory.length > 0) {
@@ -856,6 +858,8 @@ function renderChecklists(dateStr, schedule) {
         const checkOut = userTodayLogs.find(l => l.role_name === sched.roleName && l.type === 'salida');
         if (checkIn && !checkOut) {
             activeRolesList = activeRolesList.concat(sched.roles);
+            activeRolesList.push(sched.roleName);
+            activeRolesList.push(sched.roleKey);
         }
     });
     renderChecklistsForRoles(dateStr, activeRolesList, schedules);
@@ -1409,7 +1413,16 @@ function renderAdminWeeklyRoles() {
     const weekStr = formatDateString(currentRoleViewWeekStart);
     const schedule = weeklyRoles[weekStr] || {};
 
-    const selectIds = ['roleMatutino1', 'roleMatutino2', 'roleVespertinoCajera', 'roleVespertinoBarista', 'roleVespertinoCocina', 'roleApoyo'];
+    const selectIds = [
+        'roleMatutinoCajeroBarista',
+        'roleMatutinoCocinaBarista',
+        'roleVespertinoCajero',
+        'roleVespertinoBarista',
+        'roleVespertinoCocina',
+        'roleAuxAdministrativo',
+        'roleApoyoCocina',
+        'roleApoyoGeneral'
+    ];
     
     selectIds.forEach(id => {
         const select = document.getElementById(id);
@@ -1433,12 +1446,14 @@ function renderAdminWeeklyRoles() {
 }
 
 function getRoleKeyFromSelectId(id) {
-    if (id === 'roleMatutino1') return 'matutino1';
-    if (id === 'roleMatutino2') return 'matutino2';
-    if (id === 'roleVespertinoCajera') return 'vespertinoCajera';
+    if (id === 'roleMatutinoCajeroBarista') return 'matutinoCajeroBarista';
+    if (id === 'roleMatutinoCocinaBarista') return 'matutinoCocinaBarista';
+    if (id === 'roleVespertinoCajero') return 'vespertinoCajero';
     if (id === 'roleVespertinoBarista') return 'vespertinoBarista';
     if (id === 'roleVespertinoCocina') return 'vespertinoCocina';
-    if (id === 'roleApoyo') return 'apoyo';
+    if (id === 'roleAuxAdministrativo') return 'auxAdministrativo';
+    if (id === 'roleApoyoCocina') return 'apoyoCocina';
+    if (id === 'roleApoyoGeneral') return 'apoyoGeneral';
     return '';
 }
 
@@ -1453,7 +1468,16 @@ function saveWeeklyRoles() {
         weeklyRoles[weekStr] = {};
     }
 
-    const selectIds = ['roleMatutino1', 'roleMatutino2', 'roleVespertinoCajera', 'roleVespertinoBarista', 'roleVespertinoCocina', 'roleApoyo'];
+    const selectIds = [
+        'roleMatutinoCajeroBarista',
+        'roleMatutinoCocinaBarista',
+        'roleVespertinoCajero',
+        'roleVespertinoBarista',
+        'roleVespertinoCocina',
+        'roleAuxAdministrativo',
+        'roleApoyoCocina',
+        'roleApoyoGeneral'
+    ];
     
     selectIds.forEach(id => {
         const select = document.getElementById(id);
