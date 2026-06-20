@@ -10,6 +10,8 @@ create table if not exists public.roods_employees (
     name text not null,
     pin text not null unique,
     is_admin boolean default false,
+    photo text, -- Foto en Base64
+    nickname text, -- Apodo o nombre de visualización
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -30,6 +32,8 @@ create table if not exists public.roods_attendance (
     date text not null,
     time text not null,
     type text not null, -- 'entrada' o 'salida'
+    role_name text, -- Rol que está checando
+    shift text, -- Turno que está checando
     timestamp timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -79,9 +83,18 @@ create table if not exists public.roods_task_templates (
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- 7. Tabla de Mensajes (Muro de Avisos del Turno)
+create table if not exists public.roods_messages (
+    id bigint primary key generated always as identity,
+    employee_id bigint references public.roods_employees(id) on delete set null,
+    employee_name text not null,
+    message text not null,
+    timestamp timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- --- HABILITAR REPLICACIÓN EN TIEMPO REAL (REALTIME) ---
--- Esto permite que la Consola de RH reciba actualizaciones instantáneas y los empleados reciban alertas urgentes
 alter publication supabase_realtime add table public.roods_daily_tasks;
 alter publication supabase_realtime add table public.roods_attendance;
 alter publication supabase_realtime add table public.roods_swaps;
 alter publication supabase_realtime add table public.roods_employees;
+alter publication supabase_realtime add table public.roods_messages;

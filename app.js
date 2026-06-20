@@ -6,6 +6,66 @@ const CLOUD_CONFIG = {
 
 let supabase = null;
 
+// --- ROODS 8 Roles Configuration with Schedules ---
+const ROODS_ROLES = {
+    'matutinoCajeroBarista': {
+        key: 'matutinoCajeroBarista',
+        name: 'Cajero - Barista',
+        shift: 'Matutino',
+        hours: '9:30 - 17:30',
+        taskRoles: ['Cajera', 'Barista']
+    },
+    'matutinoCocinaBarista': {
+        key: 'matutinoCocinaBarista',
+        name: 'Cocina - Barista',
+        shift: 'Matutino',
+        hours: '9:30 - 17:30',
+        taskRoles: ['Cocina', 'Barista']
+    },
+    'vespertinoCajero': {
+        key: 'vespertinoCajero',
+        name: 'Cajero',
+        shift: 'Vespertino',
+        hours: '17:00 - 22:30',
+        taskRoles: ['Cajera']
+    },
+    'vespertinoBarista': {
+        key: 'vespertinoBarista',
+        name: 'Barista',
+        shift: 'Vespertino',
+        hours: '17:00 - 22:30',
+        taskRoles: ['Barista']
+    },
+    'vespertinoCocina': {
+        key: 'vespertinoCocina',
+        name: 'Cocina',
+        shift: 'Vespertino',
+        hours: '17:00 - 22:30',
+        taskRoles: ['Cocina']
+    },
+    'auxAdministrativo': {
+        key: 'auxAdministrativo',
+        name: 'Aux. Administrativo',
+        shift: 'Matutino',
+        hours: '14:30 - 17:00',
+        taskRoles: ['Apoyo']
+    },
+    'apoyoCocina': {
+        key: 'apoyoCocina',
+        name: 'Apoyo Cocina',
+        shift: 'Matutino',
+        hours: '14:30 - 17:00',
+        taskRoles: ['Cocina', 'Apoyo']
+    },
+    'apoyoGeneral': {
+        key: 'apoyoGeneral',
+        name: 'Apoyo General',
+        shift: 'Mixto',
+        hours: '12:00 - 22:30',
+        taskRoles: ['Apoyo']
+    }
+};
+
 // --- Data Models (State) ---
 let employees = [];
 let weeklyRoles = {}; // Keyed by Wednesday date string (YYYY-MM-DD)
@@ -13,6 +73,7 @@ let attendanceLogs = [];
 let swapRequests = [];
 let taskTemplates = [];
 let dailyTasks = []; // Active instances of tasks for the current day
+let muroMessages = []; // Muro de Avisos messages
 
 let currentPIN = "";
 let currentUser = null; // Currently logged in user
@@ -352,7 +413,14 @@ function showSection(sectionId) {
 // --- EMPLOYEE VIEW LOGIC ---
 function initEmployeeView() {
     // Welcome message
-    document.getElementById('employeeWelcome').textContent = `¡Hola, ${currentUser.name}!`;
+    const displayName = currentUser.nickname || currentUser.name;
+    document.getElementById('employeeWelcome').textContent = `¡Hola, ${displayName}!`;
+
+    // Render avatar
+    const avatarImg = document.getElementById('employeeProfilePic');
+    if (avatarImg) {
+        avatarImg.src = currentUser.photo || '';
+    }
 
     // Calculate current schedule
     const today = new Date();
@@ -362,188 +430,229 @@ function initEmployeeView() {
 
     // Check if it's Tuesday (Rest day)
     if (today.getDay() === 2) { // Tuesday
-        document.getElementById('employeeRole').textContent = "Descanso";
-        document.getElementById('employeeShift').textContent = "Día libre";
-        document.getElementById('btnCheckIn').classList.add('hidden');
-        document.getElementById('btnCheckOut').classList.add('hidden');
-        document.getElementById('attendanceMessage').innerHTML = "☕ Hoy es Martes, <strong>Día de descanso</strong> de la cafetería.<br>¡Disfruta tu descanso!";
+        document.getElementById('employeeRolesContainer').innerHTML = '<span style="background:#FFEBEB; color:#C62828; padding:4px 10px; border-radius:12px; font-size:0.75rem; font-weight:700;">Descanso - Sucursal Cerrada</span>';
+        const shiftsContainer = document.getElementById('checadorShiftsContainer');
+        shiftsContainer.innerHTML = `<p class="attendance-message">☕ Hoy es Martes, <strong>Día de descanso</strong> de la cafetería.<br>¡Disfruta tu descanso!</p>`;
         document.getElementById('tasksContainer').classList.add('locked');
         return;
     }
 
-    // Resolve today's shift assignment & swap
-    const schedule = resolveTodaySchedule(currentUser.id, today);
-    if (!schedule) {
-        document.getElementById('employeeRole').textContent = "Sin Rol";
-        document.getElementById('employeeShift').textContent = "No programado";
-        document.getElementById('btnCheckIn').classList.add('hidden');
-        document.getElementById('btnCheckOut').classList.add('hidden');
-        document.getElementById('attendanceMessage').textContent = "No tienes un rol programado para hoy.";
+    // Resolve today's shift assignments (can be multiple)
+    const schedules = resolveTodaySchedules(currentUser.id, today);
+    const rolesContainer = document.getElementById('employeeRolesContainer');
+    rolesContainer.innerHTML = '';
+
+    if (schedules.length === 0) {
+        rolesContainer.innerHTML = '<span style="background:#ECEFF1; color:#37474F; padding:4px 10px; border-radius:12px; font-size:0.75rem; font-weight:700;">Sin Rol Asignado Hoy</span>';
+        const shiftsContainer = document.getElementById('checadorShiftsContainer');
+        shiftsContainer.innerHTML = `<p class="attendance-message">No tienes un rol programado para hoy.</p>`;
         document.getElementById('tasksContainer').classList.add('locked');
         return;
     }
 
-    document.getElementById('employeeRole').textContent = schedule.roleDisplay;
-    document.getElementById('employeeShift').textContent = `Turno ${schedule.shift}`;
+    // Render badges for each schedule
+    schedules.forEach(sched => {
+        const badge = document.createElement('span');
+        badge.style.fontSize = '0.75rem';
+        badge.style.fontWeight = '700';
+        badge.style.padding = '4px 10px';
+        badge.style.borderRadius = '12px';
+        badge.style.display = 'inline-block';
+        badge.style.background = 'linear-gradient(135deg, var(--primary-gradient-start), var(--primary-gradient-end))';
+        badge.style.color = 'white';
+        badge.textContent = `${sched.roleDisplay} (${sched.shift}: ${sched.hours})`;
+        rolesContainer.appendChild(badge);
+    });
 
     // Attendance State Check
-    updateAttendanceUI(today, schedule);
+    updateAttendanceUI(today, schedules);
     checkForUrgentTasks();
+
+    // Muro de mensajes load
+    loadMuroMessages();
 }
 
-function resolveTodaySchedule(empId, date) {
+function resolveTodaySchedules(empId, date) {
     const dateStr = formatDateString(date);
-    const dayNum = date.getDay(); // 0 is Sun, 6 is Sat
+    const schedules = [];
 
     // 1. Check if there is an approved swap for today where this employee covers
-    const approvedSwapCover = swapRequests.find(s => 
+    const approvedSwapsCover = swapRequests.filter(s => 
         s.request_date === dateStr && 
         s.to_employee_id === empId && 
         s.status === 'aprobado'
     );
-    if (approvedSwapCover) {
-        // Employee is covering someone else
-        const originalOwner = employees.find(e => e.id === approvedSwapCover.from_employee_id);
-        const rolesList = resolveRolesList(approvedSwapCover.role_name);
-        return {
-            roles: rolesList,
-            roleDisplay: approvedSwapCover.role_name + ` (Cubre a ${originalOwner ? originalOwner.name : 'compañero'})`,
-            shift: approvedSwapCover.shift,
-            isSwap: true
+    approvedSwapsCover.forEach(swap => {
+        const originalOwner = employees.find(e => e.id === swap.from_employee_id);
+        const roleInfo = Object.values(ROODS_ROLES).find(r => r.name === swap.role_name) || {
+            key: 'swap-' + swap.id,
+            taskRoles: [swap.role_name],
+            hours: 'Especial'
         };
-    }
+        schedules.push({
+            roleKey: roleInfo.key,
+            roleName: swap.role_name,
+            roleDisplay: swap.role_name + ` (Cubre a ${originalOwner ? originalOwner.name : 'compañero'})`,
+            shift: swap.shift,
+            hours: roleInfo.hours || 'Especial',
+            roles: roleInfo.taskRoles || [swap.role_name],
+            isSwap: true
+        });
+    });
 
-    // Check if there is an approved swap where this employee was covered by someone else
-    const approvedSwapRequester = swapRequests.find(s => 
+    // Get list of role names that the employee swapped out today
+    const approvedSwapsRequester = swapRequests.filter(s => 
         s.request_date === dateStr && 
         s.from_employee_id === empId && 
         s.status === 'aprobado'
     );
-    if (approvedSwapRequester) {
-        // Employee is covered by someone else, so they have no schedule today
-        return null;
-    }
+    const swappedRoleNames = approvedSwapsRequester.map(s => s.role_name);
 
     // 2. Fetch from Weekly schedule
     const wednesdayDate = getStartOfWeekWednesday(date);
     const wednesdayStr = formatDateString(wednesdayDate);
     const weekSchedule = weeklyRoles[wednesdayStr];
 
-    if (!weekSchedule) return null;
-
-    // Determine role keys that match this employee
-    let employeeRoleKey = null;
-    let employeeRoleName = "";
-    let employeeShift = "";
-
-    // Search through all keys
-    for (const [key, val] of Object.entries(weekSchedule)) {
-        if (val === empId) {
-            employeeRoleKey = key;
-            break;
+    if (weekSchedule) {
+        for (const [roleKey, assignedEmpId] of Object.entries(weekSchedule)) {
+            if (assignedEmpId === empId) {
+                const roleInfo = ROODS_ROLES[roleKey];
+                if (roleInfo) {
+                    // Check if this weekly role assignment was swapped out
+                    if (swappedRoleNames.includes(roleInfo.name)) {
+                        continue;
+                    }
+                    schedules.push({
+                        roleKey: roleInfo.key,
+                        roleName: roleInfo.name,
+                        roleDisplay: roleInfo.name,
+                        shift: roleInfo.shift,
+                        hours: roleInfo.hours,
+                        roles: roleInfo.taskRoles,
+                        isSwap: false
+                    });
+                }
+            }
         }
     }
 
-    if (!employeeRoleKey) return null;
+    return schedules;
+}
 
-    // Map role key to role name and shift
-    if (employeeRoleKey === 'matutino1') {
-        employeeRoleName = "Cajera + Barista";
-        employeeShift = "Matutino";
-    } else if (employeeRoleKey === 'matutino2') {
-        employeeRoleName = "Cocina";
-        employeeShift = "Matutino";
-    } else if (employeeRoleKey === 'vespertinoCajera') {
-        employeeRoleName = "Cajera";
-        employeeShift = "Vespertino";
-    } else if (employeeRoleKey === 'vespertinoBarista') {
-        employeeRoleName = "Barista";
-        employeeShift = "Vespertino";
-    } else if (employeeRoleKey === 'vespertinoCocina') {
-        employeeRoleName = "Cocina";
-        employeeShift = "Vespertino";
-    } else if (employeeRoleKey === 'apoyo') {
-        // Apoyo is only Sat/Sun
-        if (dayNum === 0 || dayNum === 6) { // Sat or Sun
-            employeeRoleName = "Rol de Apoyo";
-            employeeShift = "Vespertino"; // Apoyo operates in the afternoon busy shift
-        } else {
-            return null; // Not active on weekdays
-        }
-    }
-
-    const rolesList = resolveRolesList(employeeRoleName);
-    return {
-        roles: rolesList,
-        roleDisplay: employeeRoleName,
-        shift: employeeShift,
-        isSwap: false
-    };
+function resolveTodaySchedule(empId, date) {
+    const list = resolveTodaySchedules(empId, date);
+    return list.length > 0 ? list[0] : null;
 }
 
 function resolveRolesList(roleDisplay) {
-    if (roleDisplay.includes("Cajera + Barista")) {
-        return ["Cajera", "Barista"];
-    } else if (roleDisplay.includes("Cajera")) {
-        return ["Cajera"];
-    } else if (roleDisplay.includes("Barista")) {
-        return ["Barista"];
-    } else if (roleDisplay.includes("Cocina")) {
-        return ["Cocina"];
-    } else if (roleDisplay.includes("Rol de Apoyo")) {
-        return ["Apoyo"];
-    }
-    return [];
+    const matched = Object.values(ROODS_ROLES).find(r => r.name === roleDisplay);
+    return matched ? matched.taskRoles : [];
 }
 
 // Attendance Logs checks
-function updateAttendanceUI(today, schedule) {
+function updateAttendanceUI(today, schedules) {
     const todayStr = formatDateString(today);
+    const container = document.getElementById('tasksContainer');
+    const shiftsContainer = document.getElementById('checadorShiftsContainer');
+    const statusDot = document.getElementById('attendanceStatusDot');
     
-    // Find logs for today for this user
+    if (!shiftsContainer) return;
+    shiftsContainer.innerHTML = "";
+
+    // Find all attendance logs for this user today
     const userTodayLogs = attendanceLogs.filter(l => 
         l.employee_id === currentUser.id && 
         l.date === todayStr
     );
 
-    const checkIn = userTodayLogs.find(l => l.type === 'entrada');
-    const checkOut = userTodayLogs.find(l => l.type === 'salida');
+    let isAnyActive = false;
+    let activeRolesList = [];
 
-    const statusDot = document.getElementById('attendanceStatusDot');
-    const btnIn = document.getElementById('btnCheckIn');
-    const btnOut = document.getElementById('btnCheckOut');
-    const msg = document.getElementById('attendanceMessage');
-    const container = document.getElementById('tasksContainer');
+    schedules.forEach(sched => {
+        // Find logs specifically for this role
+        const roleLogs = userTodayLogs.filter(l => 
+            l.role_name === sched.roleName || 
+            (userTodayLogs.length > 0 && !l.role_name && schedules.length === 1)
+        );
 
-    if (!checkIn) {
-        // Has not checked in yet
-        statusDot.className = "status-indicator-dot";
-        btnIn.classList.remove('hidden');
-        btnOut.classList.add('hidden');
-        msg.textContent = "🔒 Por favor checa tu entrada para ver tus tareas de hoy.";
-        container.classList.add('locked');
-    } else if (checkIn && !checkOut) {
-        // Checked in, active
+        const checkIn = roleLogs.find(l => l.type === 'entrada');
+        const checkOut = roleLogs.find(l => l.type === 'salida');
+
+        // Create HTML row for this shift
+        const shiftRow = document.createElement('div');
+        shiftRow.style.display = 'flex';
+        shiftRow.style.alignItems = 'center';
+        shiftRow.style.justifyContent = 'space-between';
+        shiftRow.style.padding = '12px 15px';
+        shiftRow.style.margin = '8px 0';
+        shiftRow.style.borderRadius = 'var(--border-radius-small)';
+        shiftRow.style.background = 'rgba(255, 255, 255, 0.45)';
+        shiftRow.style.border = '1px solid rgba(255, 255, 255, 0.3)';
+
+        let statusText = "";
+        let actionBtnHtml = "";
+
+        if (!checkIn) {
+            // Not checked in
+            statusText = `<span style="font-size:0.85rem; color:var(--text-secondary);">⏳ Horario: ${sched.hours}</span>`;
+            actionBtnHtml = `<button class="btn-primary" onclick="performCheckIn('${sched.roleKey}')" style="padding: 6px 14px; font-size:0.85rem; border:none; border-radius:8px;">Entrada 📥</button>`;
+        } else if (checkIn && !checkOut) {
+            // Active
+            isAnyActive = true;
+            activeRolesList = activeRolesList.concat(sched.roles);
+            statusText = `<span style="font-size:0.85rem; color:#388E3C; font-weight:700;">🟢 Entrada: ${checkIn.time}</span>`;
+            actionBtnHtml = `<button class="btn-secondary" onclick="performCheckOut('${sched.roleKey}')" style="padding: 6px 14px; font-size:0.85rem; border:none; border-radius:8px;">Salida 📤</button>`;
+        } else {
+            // Checked out
+            statusText = `<span style="font-size:0.85rem; color:var(--text-light); text-decoration: line-through;">🏁 Salida: ${checkOut.time} (Terminado)</span>`;
+            actionBtnHtml = `<span style="font-size: 1.25rem;">✅</span>`;
+        }
+
+        shiftRow.innerHTML = `
+            <div style="text-align: left;">
+                <strong style="font-size:0.95rem; display:block;">${sched.roleDisplay}</strong>
+                ${statusText}
+            </div>
+            <div>
+                ${actionBtnHtml}
+            </div>
+        `;
+        shiftsContainer.appendChild(shiftRow);
+    });
+
+    // Update global status dot
+    if (isAnyActive) {
         statusDot.className = "status-indicator-dot active";
-        btnIn.classList.add('hidden');
-        btnOut.classList.remove('hidden');
-        msg.innerHTML = `📥 Entrada registrada: <strong>${checkIn.time}</strong>`;
         container.classList.remove('locked');
         
-        // Generate and Load checklists
-        generateDailyTasks(todayStr, schedule);
-        renderChecklists(todayStr, schedule);
+        // Ensure daily tasks exist for active schedules
+        schedules.forEach(sched => {
+            generateDailyTasks(todayStr, sched);
+        });
+
+        // Render combined active checklists
+        renderChecklistsForRoles(todayStr, activeRolesList, schedules);
     } else {
-        // Checked out
         statusDot.className = "status-indicator-dot";
-        btnIn.classList.add('hidden');
-        btnOut.classList.add('hidden');
-        msg.innerHTML = `📤 Salida registrada: <strong>${checkOut.time}</strong> (Turno Terminado)`;
         container.classList.add('locked');
+        shiftsContainer.innerHTML += `<p class="attendance-message" style="margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary);">🔒 Por favor checa tu entrada en tu turno activo para desbloquear tus tareas de hoy.</p>`;
     }
 }
 
-function performCheckIn() {
+function performCheckIn(roleKey) {
+    if (!roleKey) {
+        const today = new Date();
+        const schedules = resolveTodaySchedules(currentUser.id, today);
+        if (schedules.length > 0) {
+            roleKey = schedules[0].roleKey;
+        } else {
+            return;
+        }
+    }
+
+    const roleInfo = ROODS_ROLES[roleKey];
+    if (!roleInfo) return;
+
     const today = new Date();
     const todayStr = formatDateString(today);
     const timeStr = today.toTimeString().split(' ')[0];
@@ -555,6 +664,8 @@ function performCheckIn() {
         date: todayStr,
         time: timeStr,
         type: 'entrada',
+        role_name: roleInfo.name,
+        shift: roleInfo.shift,
         timestamp: today.toISOString()
     };
 
@@ -562,31 +673,41 @@ function performCheckIn() {
     saveLocalDatabase();
     pushToCloudTable('roods_attendance', log);
 
-    showNotification("📥 Entrada registrada con éxito.");
+    showNotification(`📥 Entrada registrada para ${roleInfo.name}.`);
     initEmployeeView();
 }
 
-function performCheckOut() {
-    // Check for pending mandatory tasks
-    const today = new Date();
-    const todayStr = formatDateString(today);
-    const schedule = resolveTodaySchedule(currentUser.id, today);
-    if (schedule) {
-        // Find tasks for this employee on their active role/shift today
-        const empTasks = dailyTasks.filter(d => 
-            d.date === todayStr && 
-            d.shift === schedule.shift && 
-            schedule.roles.includes(d.role_name)
-        );
-        const pendingMandatory = empTasks.filter(t => t.Imprescindible === 'Si' && !t.completed);
-        if (pendingMandatory.length > 0) {
-            let taskNames = pendingMandatory.map(t => `• ${t.task_name}`).join("\n");
-            alert(`⚠️ NO PUEDES REGISTRAR TU SALIDA.\n\nTienes tareas de seguridad o cierre imprescindibles pendientes:\n\n${taskNames}\n\nPor favor, complétalas para poder checar tu salida.`);
+function performCheckOut(roleKey) {
+    if (!roleKey) {
+        const today = new Date();
+        const schedules = resolveTodaySchedules(currentUser.id, today);
+        if (schedules.length > 0) {
+            roleKey = schedules[0].roleKey;
+        } else {
             return;
         }
     }
 
-    if (!confirm("¿Estás seguro de que deseas checar tu salida? Se cerrará tu turno de hoy.")) {
+    const roleInfo = ROODS_ROLES[roleKey];
+    if (!roleInfo) return;
+
+    const today = new Date();
+    const todayStr = formatDateString(today);
+
+    // Check for pending mandatory tasks
+    const empTasks = dailyTasks.filter(d => 
+        d.date === todayStr && 
+        d.shift === roleInfo.shift && 
+        roleInfo.taskRoles.includes(d.role_name)
+    );
+    const pendingMandatory = empTasks.filter(t => t.Imprescindible === 'Si' && !t.completed);
+    if (pendingMandatory.length > 0) {
+        let taskNames = pendingMandatory.map(t => `• ${t.task_name}`).join("\n");
+        alert(`⚠️ NO PUEDES REGISTRAR TU SALIDA.\n\nTienes tareas de seguridad o cierre imprescindibles pendientes para ${roleInfo.name}:\n\n${taskNames}\n\nPor favor, complétalas para poder checar tu salida.`);
+        return;
+    }
+
+    if (!confirm(`¿Estás seguro de que deseas checar tu salida de ${roleInfo.name}?`)) {
         return;
     }
 
@@ -599,6 +720,8 @@ function performCheckOut() {
         date: todayStr,
         time: timeStr,
         type: 'salida',
+        role_name: roleInfo.name,
+        shift: roleInfo.shift,
         timestamp: today.toISOString()
     };
 
@@ -606,7 +729,7 @@ function performCheckOut() {
     saveLocalDatabase();
     pushToCloudTable('roods_attendance', log);
 
-    showNotification("📤 Salida registrada. ¡Buen trabajo hoy!");
+    showNotification(`📤 Salida registrada para ${roleInfo.name}. ¡Buen trabajo hoy!`);
     initEmployeeView();
 }
 
@@ -676,7 +799,7 @@ function generateDailyTasks(dateStr, schedule) {
     }
 }
 
-function renderChecklists(dateStr, schedule) {
+function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
     const myTasksList = document.getElementById('myTasksList');
     const collabTasksList = document.getElementById('collabTasksList');
 
@@ -685,18 +808,19 @@ function renderChecklists(dateStr, schedule) {
     myTasksList.innerHTML = "";
     collabTasksList.innerHTML = "";
 
-    // Filter today's tasks
-    const todayShiftTasks = dailyTasks.filter(d => d.date === dateStr && d.shift === schedule.shift);
+    // Filter today's tasks for active shifts
+    const activeShifts = [...new Set(schedules.map(s => s.shift))];
+    const todayTasks = dailyTasks.filter(d => d.date === dateStr && activeShifts.includes(d.shift));
 
-    // Individual tasks matching current user's roles
-    const myTasks = todayShiftTasks.filter(t => schedule.roles.includes(t.role_name));
+    // Individual tasks matching user's active roles
+    const myTasks = todayTasks.filter(t => activeRolesList.includes(t.role_name));
     
-    // Collaborative tasks for the shift
-    const collabTasks = todayShiftTasks.filter(t => t.role_name === 'Colaborativa');
+    // Collaborative tasks for active shifts
+    const collabTasks = todayTasks.filter(t => t.role_name === 'Colaborativa');
 
     // Render My Tasks
     if (myTasks.length === 0) {
-        myTasksList.innerHTML = `<div class="empty-state"><span class="empty-state-icon">🎉</span>No tienes tareas individuales hoy para el rol de ${schedule.roleDisplay}</div>`;
+        myTasksList.innerHTML = `<div class="empty-state"><span class="empty-state-icon">🎉</span>No tienes tareas individuales activas hoy</div>`;
     } else {
         myTasks.forEach(task => {
             const item = createTaskItemElement(task, false);
@@ -706,7 +830,7 @@ function renderChecklists(dateStr, schedule) {
 
     // Render Collaborative Tasks
     if (collabTasks.length === 0) {
-        collabTasksList.innerHTML = '<div class="empty-state"><span class="empty-state-icon">📋</span>No hay tareas colaborativas asignadas para este turno hoy</div>';
+        collabTasksList.innerHTML = '<div class="empty-state"><span class="empty-state-icon">📋</span>No hay tareas colaborativas asignadas para tus turnos hoy</div>';
     } else {
         collabTasks.forEach(task => {
             const item = createTaskItemElement(task, true);
@@ -716,6 +840,25 @@ function renderChecklists(dateStr, schedule) {
 
     // Update Progress Bar
     updateTaskProgress(myTasks);
+}
+
+function renderChecklists(dateStr, schedule) {
+    const today = new Date();
+    const schedules = resolveTodaySchedules(currentUser.id, today);
+    // Find active roles
+    const userTodayLogs = attendanceLogs.filter(l => 
+        l.employee_id === currentUser.id && 
+        l.date === dateStr
+    );
+    let activeRolesList = [];
+    schedules.forEach(sched => {
+        const checkIn = userTodayLogs.find(l => l.role_name === sched.roleName && l.type === 'entrada');
+        const checkOut = userTodayLogs.find(l => l.role_name === sched.roleName && l.type === 'salida');
+        if (checkIn && !checkOut) {
+            activeRolesList = activeRolesList.concat(sched.roles);
+        }
+    });
+    renderChecklistsForRoles(dateStr, activeRolesList, schedules);
 }
 
 function createTaskItemElement(task, isCollab) {
@@ -1073,32 +1216,23 @@ function renderAdminMonitoreo() {
     }
 
     // Determine active shifts today based on attendance or schedule
-    // Let's check who is checked-in right now
     const todayEntries = attendanceLogs.filter(l => l.date === todayStr);
-    const activeEmployeeIds = [];
-    
-    // We want to list all scheduled employees for today and show their progress
-    // Generate roles lists for today
-    const possibleRoleKeys = ['matutino1', 'matutino2', 'vespertinoCajera', 'vespertinoBarista', 'vespertinoCocina', 'apoyo'];
-    
-    const wedStr = formatDateString(getStartOfWeekWednesday(today));
-    const weekSched = weeklyRoles[wedStr] || {};
-
     let hasScheduled = false;
 
     // Check individual tasks progress for each active employee schedule
     employees.forEach(emp => {
         if (emp.is_admin) return;
 
-        // Resolve today's schedule for this employee
-        const sched = resolveTodaySchedule(emp.id, today);
-        if (sched) {
+        // Resolve today's schedules (could be multiple)
+        const empSchedules = resolveTodaySchedules(emp.id, today);
+        
+        empSchedules.forEach(sched => {
             hasScheduled = true;
             
-            // Check check-in status
+            // Check check-in status for this specific role
             const userLogs = todayEntries.filter(l => l.employee_id === emp.id);
-            const checkIn = userLogs.find(l => l.type === 'entrada');
-            const checkOut = userLogs.find(l => l.type === 'salida');
+            const checkIn = userLogs.find(l => l.role_name === sched.roleName && l.type === 'entrada');
+            const checkOut = userLogs.find(l => l.role_name === sched.roleName && l.type === 'salida');
 
             let attendanceStatus = '<span class="text-orange">Pendiente de entrar</span>';
             if (checkIn && !checkOut) {
@@ -1107,7 +1241,7 @@ function renderAdminMonitoreo() {
                 attendanceStatus = `<span>Salió (${checkOut.time})</span>`;
             }
 
-            // Calculate progress of daily tasks
+            // Calculate progress of daily tasks for this shift/role
             const empTasks = dailyTasks.filter(d => 
                 d.date === todayStr && 
                 d.shift === sched.shift && 
@@ -1134,11 +1268,22 @@ function renderAdminMonitoreo() {
                 tasksDetailsHtml += `</div>`;
             }
 
+            const photoSrc = emp.photo || '';
+            const displayName = emp.nickname || emp.name;
+
             const card = document.createElement('div');
             card.className = "monitor-card";
             card.innerHTML = `
-                <h4>${emp.name}</h4>
-                <p class="monitor-meta">${sched.roleDisplay} | Turno ${sched.shift}</p>
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <div class="profile-pic-container" style="width: 36px; height: 36px; border-width: 1px;">
+                        <img src="${photoSrc}" alt="Avatar" class="avatar-img" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23888888\'><path d=\'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z\'/></svg>'">
+                    </div>
+                    <div>
+                        <h4 style="margin:0; font-size:1rem;">${displayName}</h4>
+                        <p class="monitor-meta" style="margin:0; font-size:0.75rem;">${sched.roleDisplay}</p>
+                    </div>
+                </div>
+                <p class="monitor-meta" style="margin-top: 4px;">Turno ${sched.shift} (${sched.hours})</p>
                 <p class="monitor-meta">Estatus: ${attendanceStatus}</p>
                 <div class="progress-summary" style="margin-top: 15px;">
                     <div class="progress-text-container">
@@ -1152,20 +1297,22 @@ function renderAdminMonitoreo() {
                 ${tasksDetailsHtml}
             `;
             grid.appendChild(card);
-        }
+        });
     });
 
-    // Render collaborative shift progress
-    // Let's identify the active shifts today
-    const shiftsToday = [];
-    // If we have scheduled morning workers
-    const morningSched = employees.some(e => !e.is_admin && resolveTodaySchedule(e.id, today)?.shift === 'Matutino');
-    const eveningSched = employees.some(e => !e.is_admin && resolveTodaySchedule(e.id, today)?.shift === 'Vespertino');
+    // Render collaborative shift progress dynamically for all active shifts today
+    const activeShifts = [];
+    employees.forEach(e => {
+        if (e.is_admin) return;
+        const schedules = resolveTodaySchedules(e.id, today);
+        schedules.forEach(s => {
+            if (!activeShifts.includes(s.shift)) {
+                activeShifts.push(s.shift);
+            }
+        });
+    });
 
-    if (morningSched) shiftsToday.push('Matutino');
-    if (eveningSched) shiftsToday.push('Vespertino');
-
-    shiftsToday.forEach(shift => {
+    activeShifts.forEach(shift => {
         const collabTasks = dailyTasks.filter(d => d.date === todayStr && d.shift === shift && d.role_name === 'Colaborativa');
         const total = collabTasks.length;
         const completed = collabTasks.filter(t => t.completed).length;
@@ -2194,6 +2341,238 @@ function subscribeToUrgentTasks() {
         .subscribe();
 }
 
+// --- PROFILE MODAL ACTIONS ---
+function openProfileModal() {
+    document.getElementById('profileNickname').value = currentUser.nickname || currentUser.name;
+    const modalPic = document.getElementById('profileModalPic');
+    if (modalPic) {
+        modalPic.src = currentUser.photo || '';
+    }
+    document.getElementById('profileModal').classList.remove('hidden');
+}
+
+function closeProfileModal() {
+    document.getElementById('profileModal').classList.add('hidden');
+}
+
+function triggerProfileUpload() {
+    document.getElementById('profilePicInput').click();
+}
+
+function handleProfilePicChange(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    showNotification("Procesando y comprimiendo foto...");
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 120;
+            const MAX_HEIGHT = 120;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+                if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                }
+            } else {
+                if (height > MAX_HEIGHT) {
+                    width *= MAX_HEIGHT / height;
+                    height = MAX_HEIGHT;
+                }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Compresión de imagen Base64 (JPEG, 0.7 de calidad)
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            
+            // Actualizar vista previa
+            document.getElementById('profileModalPic').src = dataUrl;
+            
+            currentUser.tempPhoto = dataUrl;
+            showNotification("📷 Foto cargada. Recuerda presionar Guardar.");
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+async function submitProfileForm(event) {
+    event.preventDefault();
+    const nickname = document.getElementById('profileNickname').value.trim();
+    if (!nickname) return;
+
+    currentUser.nickname = nickname;
+    if (currentUser.tempPhoto) {
+        currentUser.photo = currentUser.tempPhoto;
+        delete currentUser.tempPhoto;
+    }
+
+    // Actualizar en array local de empleados
+    const idx = employees.findIndex(e => e.id === currentUser.id);
+    if (idx > -1) {
+        employees[idx].nickname = currentUser.nickname;
+        employees[idx].photo = currentUser.photo;
+    }
+
+    saveLocalDatabase();
+    closeProfileModal();
+    
+    // Recargar vista
+    initEmployeeView();
+    showNotification("💾 Perfil guardado correctamente.");
+
+    // Sincronizar a Supabase
+    if (supabase) {
+        try {
+            const pushObj = {
+                id: currentUser.id,
+                name: currentUser.name,
+                pin: currentUser.pin,
+                is_admin: currentUser.is_admin,
+                photo: currentUser.photo || null,
+                nickname: currentUser.nickname || null
+            };
+            const { error } = await supabase.from('roods_employees').upsert(pushObj);
+            if (error) throw error;
+        } catch (e) {
+            console.error("Failed to sync profile to cloud:", e);
+            showNotification("⚠️ Perfil guardado localmente (Offline).");
+        }
+    }
+}
+
+// --- MURO DE AVISOS REAL-TIME ---
+async function loadMuroMessages() {
+    const list = document.getElementById('muroMessagesList');
+    if (!list) return;
+
+    if (supabase) {
+        try {
+            const { data, error } = await supabase
+                .from('roods_messages')
+                .select('*')
+                .order('timestamp', { ascending: false })
+                .limit(40);
+            if (!error && data) {
+                muroMessages = data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                localStorage.setItem('roods_muro_messages', JSON.stringify(muroMessages));
+            }
+        } catch (e) {
+            console.warn("Could not load messages from Supabase, loading local cache:", e);
+        }
+    }
+
+    if (muroMessages.length === 0) {
+        muroMessages = JSON.parse(localStorage.getItem('roods_muro_messages')) || [];
+    }
+
+    renderMuroMessages();
+}
+
+function renderMuroMessages() {
+    const list = document.getElementById('muroMessagesList');
+    if (!list) return;
+    list.innerHTML = "";
+
+    if (muroMessages.length === 0) {
+        list.innerHTML = '<div class="empty-state" style="padding:15px; font-size:0.85rem;"><span class="empty-state-icon" style="font-size:1.5rem;">💬</span>No hay avisos recientes. ¡Escribe el primero!</div>';
+        return;
+    }
+
+    muroMessages.forEach(msg => {
+        const sender = employees.find(e => e.id === msg.employee_id || e.name === msg.employee_name);
+        const photoSrc = (sender && sender.photo) ? sender.photo : '';
+        const displayName = (sender && sender.nickname) ? sender.nickname : msg.employee_name;
+        const timeStr = formatTimeString(msg.timestamp);
+
+        const msgDiv = document.createElement('div');
+        msgDiv.className = "muro-msg-item";
+        msgDiv.innerHTML = `
+            <div class="profile-pic-container" style="width: 32px; height: 32px; border-width: 1px;">
+                <img src="${photoSrc}" alt="Avatar" class="avatar-img" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23888888\'><path d=\'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z\'/></svg>'">
+            </div>
+            <div class="muro-msg-content">
+                <div class="muro-msg-header">
+                    <span class="muro-msg-sender">${displayName}</span>
+                    <span class="muro-msg-time">${timeStr}</span>
+                </div>
+                <span class="muro-msg-text">${msg.message}</span>
+            </div>
+        `;
+        list.appendChild(msgDiv);
+    });
+
+    list.scrollTop = list.scrollHeight;
+}
+
+async function sendMuroMessage(event) {
+    event.preventDefault();
+    const input = document.getElementById('muroMessageInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = "";
+
+    const newMsg = {
+        id: Date.now(),
+        employee_id: currentUser.id,
+        employee_name: currentUser.nickname || currentUser.name,
+        message: text,
+        timestamp: new Date().toISOString()
+    };
+
+    muroMessages.push(newMsg);
+    renderMuroMessages();
+    localStorage.setItem('roods_muro_messages', JSON.stringify(muroMessages));
+
+    if (supabase) {
+        try {
+            const dbObj = {
+                employee_id: newMsg.employee_id,
+                employee_name: newMsg.employee_name,
+                message: newMsg.message
+            };
+            const { error } = await supabase.from('roods_messages').insert(dbObj);
+            if (error) throw error;
+        } catch (e) {
+            console.error("Failed to post message to Supabase:", e);
+            showNotification("⚠️ Mensaje guardado localmente (Offline).");
+        }
+    }
+}
+
+function subscribeToMuroMessages() {
+    if (!supabase) return;
+    
+    supabase
+        .channel('muro-messages')
+        .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'roods_messages' },
+            (payload) => {
+                const newMsg = payload.new;
+                if (!newMsg) return;
+
+                if (!muroMessages.some(m => m.id === newMsg.id)) {
+                    muroMessages.push(newMsg);
+                    muroMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                    renderMuroMessages();
+                    localStorage.setItem('roods_muro_messages', JSON.stringify(muroMessages));
+                }
+            }
+        )
+        .subscribe();
+}
+
 // --- Dynamic SDK Loading ---
 function loadSupabaseDynamically() {
     const script = document.createElement('script');
@@ -2205,6 +2584,7 @@ function loadSupabaseDynamically() {
                 console.log("Supabase client loaded dynamically.");
                 syncFromCloud();
                 subscribeToUrgentTasks();
+                subscribeToMuroMessages();
             }
         } catch (e) {
             console.error("Supabase failed to initialize:", e);

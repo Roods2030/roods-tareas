@@ -71,13 +71,20 @@
         <!-- SECTION: EMPLOYEE DASHBOARD -->
         <section id="employeeSection" class="section">
             <div class="card glass dashboard-card">
-                <!-- User Info Bar -->
-                <div class="user-info-bar">
-                    <div>
-                        <h2 id="employeeWelcome">¡Hola, Empleado!</h2>
-                        <div class="user-role-badge">
-                            <span id="employeeRole">Barista + Cajera</span>
-                            <span id="employeeShift">Turno Matutino</span>
+                <div class="user-info-bar" style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div class="profile-pic-container" onclick="openProfileModal()" style="cursor: pointer; position: relative;">
+                            <img id="employeeProfilePic" src="" alt="Avatar" class="avatar-img" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23888888\'><path d=\'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z\'/></svg>'">
+                            <div class="edit-overlay">⚙️</div>
+                        </div>
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <h2 id="employeeWelcome" style="margin: 0;">¡Hola, Empleado!</h2>
+                                <button onclick="openProfileModal()" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 0; line-height: 1;">✏️</button>
+                            </div>
+                            <div class="user-role-badge" id="employeeRolesContainer" style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px;">
+                                <!-- Dynamic Badges -->
+                            </div>
                         </div>
                     </div>
                     <div class="text-right">
@@ -89,11 +96,9 @@
                 <!-- Clock-in/out Checador Card -->
                 <div class="checador-card">
                     <div class="digital-clock" id="digitalClock">17:25:30</div>
-                    <div class="checador-actions">
-                        <button id="btnCheckIn" class="btn-primary" onclick="performCheckIn()">Checar Entrada 📥</button>
-                        <button id="btnCheckOut" class="btn-secondary hidden" onclick="performCheckOut()">Checar Salida 📤</button>
+                    <div id="checadorShiftsContainer">
+                        <!-- Dynamic list of shifts and check-in/out buttons -->
                     </div>
-                    <p id="attendanceMessage" class="attendance-message">Por favor checa tu entrada para ver tus tareas.</p>
                 </div>
 
                 <!-- Tareas Container (Only visible when checked in) -->
@@ -120,6 +125,7 @@
                     <div class="tab-navigation">
                         <button class="tab-btn active" id="tabMisTareas" onclick="switchTaskTab('mis-tareas')">Mis Tareas</button>
                         <button class="tab-btn" id="tabColaborativas" onclick="switchTaskTab('colaborativas')">Tareas Turno</button>
+                        <button class="tab-btn" id="tabMuroAvisos" onclick="switchTaskTab('muro-avisos')">Muro de Avisos 💬</button>
                     </div>
 
                     <!-- Task Lists -->
@@ -131,6 +137,17 @@
                     <div class="tab-content" id="contentColaborativas">
                         <div class="task-list" id="collabTasksList">
                             <!-- Populated by JS -->
+                        </div>
+                    </div>
+                    <div class="tab-content" id="contentMuroAvisos">
+                        <div class="muro-container" style="display: flex; flex-direction: column; gap: 15px; background: rgba(255, 255, 255, 0.4); padding: 15px; border-radius: var(--border-radius-medium); border: 1px solid rgba(255,255,255,0.3);">
+                            <div class="muro-messages-list" id="muroMessagesList" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px;">
+                                <!-- Messages dynamically loaded -->
+                            </div>
+                            <form id="muroMessageForm" onsubmit="sendMuroMessage(event)" style="display: flex; gap: 10px; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 10px; margin: 0;">
+                                <input type="text" id="muroMessageInput" class="form-control" placeholder="Escribe una nota para el turno..." required style="flex-grow: 1;">
+                                <button type="submit" class="btn-primary" style="padding: 10px 20px; font-size: 0.95rem;">Enviar 🚀</button>
+                            </form>
                         </div>
                     </div>
 
@@ -248,21 +265,21 @@
                     
                     <div class="roles-manager-grid">
                         <div class="role-column">
-                            <h4>Turno Matutino (2 Empleados)</h4>
+                            <h4>Turno Matutino (9:30 - 17:30)</h4>
                             <div class="form-group">
-                                <label for="roleMatutino1">Empleado 1 (Barista + Cajera):</label>
-                                <select id="roleMatutino1" class="form-control" onchange="saveWeeklyRoles()"></select>
+                                <label for="roleMatutinoCajeroBarista">Cajero - Barista:</label>
+                                <select id="roleMatutinoCajeroBarista" class="form-control" onchange="saveWeeklyRoles()"></select>
                             </div>
                             <div class="form-group">
-                                <label for="roleMatutino2">Empleado 2 (Cocina):</label>
-                                <select id="roleMatutino2" class="form-control" onchange="saveWeeklyRoles()"></select>
+                                <label for="roleMatutinoCocinaBarista">Cocina - Barista:</label>
+                                <select id="roleMatutinoCocinaBarista" class="form-control" onchange="saveWeeklyRoles()"></select>
                             </div>
                         </div>
                         <div class="role-column">
-                            <h4>Turno Vespertino (3 Empleados)</h4>
+                            <h4>Turno Vespertino (17:00 - 22:30)</h4>
                             <div class="form-group">
-                                <label for="roleVespertinoCajera">Cajera:</label>
-                                <select id="roleVespertinoCajera" class="form-control" onchange="saveWeeklyRoles()"></select>
+                                <label for="roleVespertinoCajero">Cajero:</label>
+                                <select id="roleVespertinoCajero" class="form-control" onchange="saveWeeklyRoles()"></select>
                             </div>
                             <div class="form-group">
                                 <label for="roleVespertinoBarista">Barista:</label>
@@ -274,10 +291,18 @@
                             </div>
                         </div>
                         <div class="role-column">
-                            <h4>Fin de Semana (Apoyo)</h4>
+                            <h4>Especial / Mixto</h4>
                             <div class="form-group">
-                                <label for="roleApoyo">Rol de Apoyo (Sáb/Dom):</label>
-                                <select id="roleApoyo" class="form-control" onchange="saveWeeklyRoles()"></select>
+                                <label for="roleAuxAdministrativo">Aux. Administrativo (14:30 - 17:00):</label>
+                                <select id="roleAuxAdministrativo" class="form-control" onchange="saveWeeklyRoles()"></select>
+                            </div>
+                            <div class="form-group">
+                                <label for="roleApoyoCocina">Apoyo Cocina (14:30 - 17:00):</label>
+                                <select id="roleApoyoCocina" class="form-control" onchange="saveWeeklyRoles()"></select>
+                            </div>
+                            <div class="form-group">
+                                <label for="roleApoyoGeneral">Apoyo General (12:00 - 22:30):</label>
+                                <select id="roleApoyoGeneral" class="form-control" onchange="saveWeeklyRoles()"></select>
                             </div>
                         </div>
                     </div>
@@ -351,6 +376,31 @@
                 </div>
             </div>
         </section>
+    </div>
+
+    <!-- MODAL: EDIT PROFILE -->
+    <div id="profileModal" class="modal hidden">
+        <div class="modal-content card glass" style="max-width: 420px; text-align: center;">
+            <button class="btn-close" onclick="closeProfileModal()">×</button>
+            <h3>Mi Perfil de Colaborador</h3>
+            <p class="subtitle">Personaliza tu apodo y tu foto de perfil</p>
+            
+            <div style="margin: 20px 0; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                <div class="profile-pic-container-large" onclick="triggerProfileUpload()" style="cursor: pointer; position: relative; width: 100px; height: 100px; border-radius: 50%; overflow: hidden; border: 3px solid var(--primary-gradient-start); box-shadow: 0 4px 15px rgba(0,0,0,0.15); margin: 0 auto;">
+                    <img id="profileModalPic" src="" alt="Avatar" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23888888\'><path d=\'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z\'/></svg>'">
+                </div>
+                <input type="file" id="profilePicInput" accept="image/*" style="display: none;" onchange="handleProfilePicChange(event)">
+                <button type="button" class="btn-outline" style="padding: 6px 12px; font-size: 0.8rem;" onclick="triggerProfileUpload()">Subir Foto 📷</button>
+            </div>
+
+            <form id="profileForm" onsubmit="submitProfileForm(event)">
+                <div class="form-group" style="text-align: left;">
+                    <label for="profileNickname">Apodo / Nombre de Visualización:</label>
+                    <input type="text" id="profileNickname" required class="form-control" placeholder="Ej. Juanito">
+                </div>
+                <button type="submit" class="btn-submit" style="width: 100%; justify-content: center;">Guardar Cambios 💾</button>
+            </form>
+        </div>
     </div>
 
     <!-- MODAL: SWAP SHIFT REQUEST -->
