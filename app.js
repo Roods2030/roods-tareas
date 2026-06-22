@@ -74,6 +74,7 @@ let swapRequests = [];
 let taskTemplates = [];
 let dailyTasks = []; // Active instances of tasks for the current day
 let muroMessages = []; // Muro de Avisos messages
+let lastReadMuroTimestamp = localStorage.getItem('roods_last_read_muro') || '1970-01-01T00:00:00.000Z';
 
 let currentPIN = "";
 let currentUser = null; // Currently logged in user
@@ -1085,6 +1086,16 @@ function switchTaskTab(tabId) {
     document.getElementById('contentMisTareas').className = `tab-content ${tabId === 'mis-tareas' ? 'active' : ''}`;
     document.getElementById('contentColaborativas').className = `tab-content ${tabId === 'colaborativas' ? 'active' : ''}`;
     document.getElementById('contentMuroAvisos').className = `tab-content ${tabId === 'muro-avisos' ? 'active' : ''}`;
+
+    if (tabId === 'muro-avisos') {
+        if (muroMessages.length > 0) {
+            lastReadMuroTimestamp = muroMessages[muroMessages.length - 1].timestamp;
+        } else {
+            lastReadMuroTimestamp = new Date().toISOString();
+        }
+        localStorage.setItem('roods_last_read_muro', lastReadMuroTimestamp);
+        updateMuroBadge();
+    }
 }
 
 // --- SHIFT SWAP MODAL LOGIC ---
@@ -1191,6 +1202,16 @@ function switchAdminTab(tabId) {
     if (tabId === 'swaps') renderAdminSwaps();
     if (tabId === 'tareas-csv') renderAdminCsvView();
     if (tabId === 'empleados') renderAdminEmployees();
+    if (tabId === 'muro-avisos-admin') {
+        loadMuroMessages();
+        if (muroMessages.length > 0) {
+            lastReadMuroTimestamp = muroMessages[muroMessages.length - 1].timestamp;
+        } else {
+            lastReadMuroTimestamp = new Date().toISOString();
+        }
+        localStorage.setItem('roods_last_read_muro', lastReadMuroTimestamp);
+        updateMuroBadge();
+    }
 
     updateSwapsBadge();
 }
@@ -2682,7 +2703,8 @@ async function submitProfileForm(event) {
 // --- MURO DE AVISOS REAL-TIME ---
 async function loadMuroMessages() {
     const list = document.getElementById('muroMessagesList');
-    if (!list) return;
+    const adminList = document.getElementById('adminMuroMessagesList');
+    if (!list && !adminList) return;
 
     if (supabase) {
         try {
@@ -2705,52 +2727,89 @@ async function loadMuroMessages() {
     }
 
     renderMuroMessages();
+    updateMuroBadge();
 }
 
 function renderMuroMessages() {
     const list = document.getElementById('muroMessagesList');
-    if (!list) return;
-    list.innerHTML = "";
+    const adminList = document.getElementById('adminMuroMessagesList');
+    if (!list && !adminList) return;
 
+    let listHtml = "";
     if (muroMessages.length === 0) {
-        list.innerHTML = '<div class="empty-state" style="padding:15px; font-size:0.85rem;"><span class="empty-state-icon" style="font-size:1.5rem;">💬</span>No hay avisos recientes. ¡Escribe el primero!</div>';
-        return;
+        listHtml = '<div class="empty-state" style="padding:15px; font-size:0.85rem;"><span class="empty-state-icon" style="font-size:1.5rem;">💬</span>No hay avisos recientes. ¡Escribe el primero!</div>';
+    } else {
+        muroMessages.forEach(msg => {
+            const sender = employees.find(e => e.id === msg.employee_id || e.name === msg.employee_name);
+            const photoSrc = (sender && sender.photo) ? sender.photo : '';
+            const displayName = (sender && sender.nickname) ? sender.nickname : msg.employee_name;
+            const timeStr = formatTimeString(msg.timestamp);
+
+            listHtml += `
+                <div class="muro-msg-item">
+                    <div class="profile-pic-container" style="width: 32px; height: 32px; border-width: 1px;">
+                        <img src="${photoSrc}" alt="Avatar" class="avatar-img" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23888888\'><path d=\'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z\'/></svg>'">
+                    </div>
+                    <div class="muro-msg-content">
+                        <div class="muro-msg-header">
+                            <span class="muro-msg-sender">${displayName}</span>
+                            <span class="muro-msg-time">${timeStr}</span>
+                        </div>
+                        <span class="muro-msg-text">${msg.message}</span>
+                    </div>
+                </div>
+            `;
+        });
     }
 
-    muroMessages.forEach(msg => {
-        const sender = employees.find(e => e.id === msg.employee_id || e.name === msg.employee_name);
-        const photoSrc = (sender && sender.photo) ? sender.photo : '';
-        const displayName = (sender && sender.nickname) ? sender.nickname : msg.employee_name;
-        const timeStr = formatTimeString(msg.timestamp);
+    if (list) {
+        list.innerHTML = listHtml;
+        list.scrollTop = list.scrollHeight;
+    }
+    if (adminList) {
+        adminList.innerHTML = listHtml;
+        adminList.scrollTop = adminList.scrollHeight;
+    }
+}
 
-        const msgDiv = document.createElement('div');
-        msgDiv.className = "muro-msg-item";
-        msgDiv.innerHTML = `
-            <div class="profile-pic-container" style="width: 32px; height: 32px; border-width: 1px;">
-                <img src="${photoSrc}" alt="Avatar" class="avatar-img" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23888888\'><path d=\'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z\'/></svg>'">
-            </div>
-            <div class="muro-msg-content">
-                <div class="muro-msg-header">
-                    <span class="muro-msg-sender">${displayName}</span>
-                    <span class="muro-msg-time">${timeStr}</span>
-                </div>
-                <span class="muro-msg-text">${msg.message}</span>
-            </div>
-        `;
-        list.appendChild(msgDiv);
-    });
-
-    list.scrollTop = list.scrollHeight;
+function updateMuroBadge() {
+    const hasUnread = muroMessages.some(msg => msg.timestamp > lastReadMuroTimestamp);
+    
+    const empDot = document.getElementById('muroBadgeDot');
+    const adminDot = document.getElementById('adminMuroBadgeDot');
+    
+    if (hasUnread) {
+        if (empDot && currentTaskTab !== 'muro-avisos') empDot.classList.remove('hidden');
+        if (adminDot && currentAdminTab !== 'muro-avisos-admin') adminDot.classList.remove('hidden');
+    } else {
+        if (empDot) empDot.classList.add('hidden');
+        if (adminDot) adminDot.classList.add('hidden');
+    }
 }
 
 async function sendMuroMessage(event) {
     event.preventDefault();
     const input = document.getElementById('muroMessageInput');
+    if (!input) return;
     const text = input.value.trim();
     if (!text) return;
 
     input.value = "";
+    await pushNewMuroMessage(text);
+}
 
+async function sendAdminMuroMessage(event) {
+    event.preventDefault();
+    const input = document.getElementById('adminMuroMessageInput');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = "";
+    await pushNewMuroMessage(text);
+}
+
+async function pushNewMuroMessage(text) {
     const newMsg = {
         id: Date.now(),
         employee_id: currentUser.id,
@@ -2762,6 +2821,11 @@ async function sendMuroMessage(event) {
     muroMessages.push(newMsg);
     renderMuroMessages();
     localStorage.setItem('roods_muro_messages', JSON.stringify(muroMessages));
+
+    // Update timestamp for sender to mark as read
+    lastReadMuroTimestamp = newMsg.timestamp;
+    localStorage.setItem('roods_last_read_muro', lastReadMuroTimestamp);
+    updateMuroBadge();
 
     if (supabase) {
         try {
@@ -2796,6 +2860,7 @@ function subscribeToMuroMessages() {
                     muroMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
                     renderMuroMessages();
                     localStorage.setItem('roods_muro_messages', JSON.stringify(muroMessages));
+                    updateMuroBadge();
                 }
             }
         )

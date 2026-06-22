@@ -125,7 +125,7 @@
                     <div class="tab-navigation">
                         <button class="tab-btn active" id="tabMisTareas" onclick="switchTaskTab('mis-tareas')">Mis Tareas</button>
                         <button class="tab-btn" id="tabColaborativas" onclick="switchTaskTab('colaborativas')">Tareas Turno</button>
-                        <button class="tab-btn" id="tabMuroAvisos" onclick="switchTaskTab('muro-avisos')">Muro de Avisos 💬</button>
+                        <button class="tab-btn" id="tabMuroAvisos" onclick="switchTaskTab('muro-avisos')">Muro de Avisos 💬 <span class="badge-dot hidden" id="muroBadgeDot"></span></button>
                     </div>
 
                     <!-- Task Lists -->
@@ -180,6 +180,7 @@
                     <button class="tab-btn" id="tabSwaps" onclick="switchAdminTab('swaps')">Cambios <span class="badge hidden" id="swapsBadge">0</span></button>
                     <button class="tab-btn" id="tabTareasCsv" onclick="switchAdminTab('tareas-csv')">Tareas CSV</button>
                     <button class="tab-btn" id="tabEmpleados" onclick="switchAdminTab('empleados')">Empleados</button>
+                    <button class="tab-btn" id="tabMuroAvisosAdmin" onclick="switchAdminTab('muro-avisos-admin')">Muro de Avisos 💬 <span class="badge-dot hidden" id="adminMuroBadgeDot"></span></button>
                 </div>
 
                 <!-- ADMIN TAB CONTENT: MONITOREO -->
@@ -208,18 +209,25 @@
                                     <label for="urgentTaskTarget" style="font-size: 0.75rem; font-weight:700;">Destinatario:</label>
                                     <select id="urgentTaskTarget" class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
                                         <option value="Todos">Todos los activos</option>
-                                        <option value="Cajera">Rol: Cajera</option>
+                                        <option value="Cajero - Barista">Rol: Cajero - Barista</option>
+                                        <option value="Cocina - Barista">Rol: Cocina - Barista</option>
+                                        <option value="Cajero">Rol: Cajero</option>
                                         <option value="Barista">Rol: Barista</option>
                                         <option value="Cocina">Rol: Cocina</option>
-                                        <option value="Apoyo">Rol: Apoyo</option>
+                                        <option value="Aux. Administrativo">Rol: Aux. Administrativo</option>
+                                        <option value="Apoyo Cocina">Rol: Apoyo Cocina</option>
+                                        <option value="Apoyo General">Rol: Apoyo General</option>
+                                        <option value="Cajera">Rol: Cajera (Anterior)</option>
+                                        <option value="Apoyo">Rol: Apoyo (Anterior)</option>
                                     </select>
                                 </div>
                                 <div class="form-group" style="margin-bottom: 15px;">
                                     <label for="urgentTaskShift" style="font-size: 0.75rem; font-weight:700;">Turno:</label>
                                     <select id="urgentTaskShift" class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
-                                        <option value="Ambos">Ambos turnos</option>
+                                        <option value="Ambos">Ambos / Todos</option>
                                         <option value="Matutino">Turno Matutino</option>
                                         <option value="Vespertino">Turno Vespertino</option>
+                                        <option value="Mixto">Turno Mixto</option>
                                     </select>
                                 </div>
                                 <button type="submit" class="btn-submit" style="margin-top: 0; padding: 10px; font-size: 0.9rem;">Enviar Tarea ⚡</button>
@@ -372,6 +380,21 @@
                                 <!-- Populated by JS -->
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- ADMIN TAB CONTENT: MURO DE AVISOS ADMIN -->
+                <div class="tab-content admin-content" id="adminContentMuroAvisosAdmin">
+                    <h3>Muro de Avisos del Turno 💬</h3>
+                    <p class="subtitle">Avisos importantes de la operación en tiempo real</p>
+                    <div class="muro-container" style="display: flex; flex-direction: column; gap: 15px; background: rgba(255, 255, 255, 0.4); padding: 15px; border-radius: var(--border-radius-medium); border: 1px solid rgba(255,255,255,0.3); margin-top: 15px;">
+                        <div class="muro-messages-list" id="adminMuroMessagesList" style="max-height: 350px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px;">
+                            <!-- Messages dynamically loaded -->
+                        </div>
+                        <form id="adminMuroMessageForm" onsubmit="sendAdminMuroMessage(event)" style="display: flex; gap: 10px; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 10px; margin: 0;">
+                            <input type="text" id="adminMuroMessageInput" class="form-control" placeholder="Escribe una nota para el turno..." required style="flex-grow: 1;">
+                            <button type="submit" class="btn-primary" style="padding: 10px 20px; font-size: 0.95rem;">Enviar 🚀</button>
+                        </form>
                     </div>
                 </div>
             </div>

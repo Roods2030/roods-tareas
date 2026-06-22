@@ -1257,3 +1257,15 @@ body {
     line-height: 1.4;
     word-break: break-word;
 }
+
+/* Badge dot for unread messages */
+.badge-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: #ff5252;
+    border-radius: 50%;
+    margin-left: 4px;
+    vertical-align: middle;
+    box-shadow: 0 0 5px rgba(255, 82, 82, 0.6);
+}
