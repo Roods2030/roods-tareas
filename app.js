@@ -765,10 +765,11 @@ function generateDailyTasks(dateStr, schedule) {
 
     // Check if daily tasks already exist for this date and shift
     const existing = dailyTasks.filter(d => d.date === dateStr && d.shift === schedule.shift);
-    
-    if (existing.length === 0) {
-        // Instantiate tasks
-        matchingTemplates.forEach(t => {
+    const existingTaskNames = new Set(existing.map(d => d.task_name));
+    const newInstances = [];
+
+    matchingTemplates.forEach(t => {
+        if (!existingTaskNames.has(t.Tarea)) {
             let subtasksState = [];
             if (t.Subtareas && t.Subtareas.trim() !== "") {
                 subtasksState = t.Subtareas.split(";").map(subName => ({
@@ -792,12 +793,13 @@ function generateDailyTasks(dateStr, schedule) {
                 subtasks_state: subtasksState
             };
             dailyTasks.push(instance);
-        });
+            newInstances.push(instance);
+        }
+    });
+
+    if (newInstances.length > 0) {
         saveLocalDatabase();
-        
-        // Push the new bulk of daily tasks to Supabase
-        const newDaily = dailyTasks.filter(d => d.date === dateStr && d.shift === schedule.shift);
-        pushToCloudTable('roods_daily_tasks', newDaily);
+        pushToCloudTable('roods_daily_tasks', newInstances);
     }
 }
 
@@ -1078,9 +1080,11 @@ function switchTaskTab(tabId) {
     currentTaskTab = tabId;
     document.getElementById('tabMisTareas').className = `tab-btn ${tabId === 'mis-tareas' ? 'active' : ''}`;
     document.getElementById('tabColaborativas').className = `tab-btn ${tabId === 'colaborativas' ? 'active' : ''}`;
+    document.getElementById('tabMuroAvisos').className = `tab-btn ${tabId === 'muro-avisos' ? 'active' : ''}`;
 
     document.getElementById('contentMisTareas').className = `tab-content ${tabId === 'mis-tareas' ? 'active' : ''}`;
     document.getElementById('contentColaborativas').className = `tab-content ${tabId === 'colaborativas' ? 'active' : ''}`;
+    document.getElementById('contentMuroAvisos').className = `tab-content ${tabId === 'muro-avisos' ? 'active' : ''}`;
 }
 
 // --- SHIFT SWAP MODAL LOGIC ---
@@ -1249,7 +1253,7 @@ function renderAdminMonitoreo() {
             const empTasks = dailyTasks.filter(d => 
                 d.date === todayStr && 
                 d.shift === sched.shift && 
-                sched.roles.includes(d.role_name)
+                (sched.roles.includes(d.role_name) || d.role_name === sched.roleName || d.role_name === sched.roleKey)
             );
             
             const total = empTasks.length;
@@ -1264,9 +1268,13 @@ function renderAdminMonitoreo() {
                     const timeText = t.completed && t.completed_at ? ` (${formatTimeString(t.completed_at)})` : "";
                     const color = t.completed ? "#388E3C" : "#888";
                     const textDecoration = t.completed ? "line-through" : "none";
-                    tasksDetailsHtml += `<div style="color: ${color}; margin-bottom: 4px; display: flex; justify-content: space-between; text-decoration: ${textDecoration};">
-                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
-                        <span style="font-weight: 600; flex-shrink: 0; margin-left: 8px;">${timeText}</span>
+                    const deleteBtnHtml = `<span onclick="deleteActiveTask('${t.id}')" style="cursor: pointer; color: #ff5252; margin-left: 8px; font-weight: bold; font-size: 0.85rem;" title="Eliminar tarea para hoy">🗑️</span>`;
+                    tasksDetailsHtml += `<div style="color: ${color}; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; text-decoration: ${textDecoration};">
+                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; display: flex; align-items: center; gap: 4px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
+                        <div style="display: flex; align-items: center; text-decoration: none;">
+                            <span style="font-weight: 600; flex-shrink: 0;">${timeText}</span>
+                            ${deleteBtnHtml}
+                        </div>
                     </div>`;
                 });
                 tasksDetailsHtml += `</div>`;
@@ -1299,6 +1307,21 @@ function renderAdminMonitoreo() {
                     </div>
                 </div>
                 ${tasksDetailsHtml}
+                
+                <!-- Quick Task Form -->
+                <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <input type="text" id="quickTaskName-${emp.id}-${sched.roleKey}" placeholder="Nueva tarea..." class="form-control" style="font-size:0.75rem; padding: 4px 8px; margin: 0; flex-grow: 1; height: 28px;">
+                        <button class="btn-primary" onclick="addQuickTask(${emp.id}, '${sched.roleKey}', '${sched.shift}', '${sched.roleName}')" style="font-size:0.75rem; padding: 4px 10px; margin: 0; border: none; border-radius: 4px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; background: linear-gradient(135deg, var(--primary-gradient-start), var(--primary-gradient-end)); color: white; cursor: pointer;">➕</button>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px; font-size: 0.7rem; color: var(--text-secondary);">
+                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; margin: 0; font-weight: normal;">
+                            <input type="checkbox" id="quickTaskMandatory-${emp.id}-${sched.roleKey}" style="margin: 0; transform: scale(0.9);"> ⭐ ¿Obligatoria?
+                        </label>
+                        <span style="color: #ccc;">|</span>
+                        <span style="font-style: italic; color: #888;">Sólo para hoy</span>
+                    </div>
+                </div>
             `;
             grid.appendChild(card);
         });
@@ -1331,9 +1354,13 @@ function renderAdminMonitoreo() {
                 const timeText = t.completed && t.completed_at ? ` (${formatTimeString(t.completed_at)})` : "";
                 const color = t.completed ? "#9c27b0" : "#888";
                 const textDecoration = t.completed ? "line-through" : "none";
-                collabDetailsHtml += `<div style="color: ${color}; margin-bottom: 4px; display: flex; justify-content: space-between; text-decoration: ${textDecoration};">
-                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
-                    <span style="font-weight: 600; flex-shrink: 0; margin-left: 8px; font-size: 0.75rem;">${byText}${timeText}</span>
+                const deleteBtnHtml = `<span onclick="deleteActiveTask('${t.id}')" style="cursor: pointer; color: #ff5252; margin-left: 8px; font-weight: bold; font-size: 0.85rem;" title="Eliminar tarea para hoy">🗑️</span>`;
+                collabDetailsHtml += `<div style="color: ${color}; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; text-decoration: ${textDecoration};">
+                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; display: flex; align-items: center; gap: 4px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
+                    <div style="display: flex; align-items: center; text-decoration: none;">
+                        <span style="font-weight: 600; flex-shrink: 0; font-size: 0.75rem;">${byText}${timeText}</span>
+                        ${deleteBtnHtml}
+                    </div>
                 </div>`;
             });
             collabDetailsHtml += `</div>`;
@@ -1356,6 +1383,21 @@ function renderAdminMonitoreo() {
                 </div>
             </div>
             ${collabDetailsHtml}
+
+            <!-- Quick Collab Task Form -->
+            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <input type="text" id="quickTaskName-collab-${shift}" placeholder="Nueva tarea colab..." class="form-control" style="font-size:0.75rem; padding: 4px 8px; margin: 0; flex-grow: 1; height: 28px;">
+                    <button class="btn-primary" onclick="addQuickTask('collab', '${shift}', '${shift}', 'Colaborativa')" style="font-size:0.75rem; padding: 4px 10px; margin: 0; border: none; border-radius: 4px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; background: linear-gradient(135deg, #9c27b0, #e91e63); color: white; cursor: pointer;">➕</button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; font-size: 0.7rem; color: var(--text-secondary);">
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; margin: 0; font-weight: normal;">
+                        <input type="checkbox" id="quickTaskMandatory-collab-${shift}" style="margin: 0; transform: scale(0.9);"> ⭐ ¿Obligatoria?
+                    </label>
+                    <span style="color: #ccc;">|</span>
+                    <span style="font-style: italic; color: #888;">Sólo para hoy</span>
+                </div>
+            </div>
         `;
         grid.appendChild(card);
     });
@@ -2141,19 +2183,7 @@ async function sendUrgentTask(event) {
     // Sync to Supabase
     if (supabase) {
         try {
-            const dbObject = {
-                task_date: newUrgentTask.date,
-                shift: newUrgentTask.shift,
-                assigned_role: newUrgentTask.role_name,
-                task_name: newUrgentTask.task_name,
-                completed: false,
-                is_collaborative: newUrgentTask.is_collaborative,
-                subtasks_state: [],
-                Imprescindible: 'No',
-                is_urgent: true,
-                urgent_acknowledged: false
-            };
-            const { error } = await supabase.from('roods_daily_tasks').insert(dbObject);
+            const { error } = await supabase.from('roods_daily_tasks').insert(newUrgentTask);
             if (error) throw error;
         } catch (e) {
             console.error("Failed to insert urgent task to Supabase:", e);
@@ -2327,42 +2357,217 @@ async function checkForUrgentTasks() {
     }
 }
 
-function subscribeToUrgentTasks() {
+function refreshEmployeeTasksUI() {
+    if (!currentUser || currentUser.is_admin) return;
+    const today = new Date();
+    const todayStr = formatDateString(today);
+    const schedules = resolveTodaySchedules(currentUser.id, today);
+    
+    // Build active roles list from currently checked-in shifts
+    const userTodayLogs = attendanceLogs.filter(l => 
+        l.employee_id === currentUser.id && 
+        l.date === todayStr
+    );
+    let activeRolesList = [];
+    schedules.forEach(sched => {
+        const checkIn = userTodayLogs.find(l => l.role_name === sched.roleName && l.type === 'entrada');
+        const checkOut = userTodayLogs.find(l => l.role_name === sched.roleName && l.type === 'salida');
+        if (checkIn && !checkOut) {
+            activeRolesList = activeRolesList.concat(sched.roles);
+            activeRolesList.push(sched.roleName);
+            activeRolesList.push(sched.roleKey);
+        }
+    });
+    
+    renderChecklistsForRoles(todayStr, activeRolesList, schedules);
+}
+
+function subscribeToAllDailyTasks() {
     if (!supabase) return;
     
     supabase
-        .channel('urgent-tasks')
+        .channel('all-daily-tasks')
         .on(
             'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'roods_daily_tasks' },
+            { event: '*', schema: 'public', table: 'roods_daily_tasks' },
             (payload) => {
-                const newTask = payload.new;
-                if (!newTask || !newTask.is_urgent) return;
-                
-                const mappedTask = {
-                    id: newTask.id,
-                    date: newTask.task_date,
-                    shift: newTask.shift,
-                    role_name: newTask.assigned_role,
-                    task_name: newTask.task_name,
-                    completed: newTask.completed,
-                    is_collaborative: newTask.is_collaborative,
-                    subtasks_state: newTask.subtasks_state || [],
-                    Imprescindible: newTask.Imprescindible || 'No',
-                    is_urgent: newTask.is_urgent,
-                    urgent_acknowledged: newTask.urgent_acknowledged
-                };
-                
-                if (!dailyTasks.some(d => d.id === mappedTask.id)) {
-                    dailyTasks.push(mappedTask);
-                    saveLocalDatabase();
+                if (payload.eventType === 'INSERT') {
+                    const newTask = payload.new;
+                    if (!newTask) return;
                     
-                    // Show alert immediately if matching user profile
-                    triggerUrgentAlertIfApplicable(mappedTask);
+                    const mappedTask = {
+                        id: newTask.id,
+                        date: newTask.date,
+                        shift: newTask.shift,
+                        task_name: newTask.task_name,
+                        role_name: newTask.role_name,
+                        completed: newTask.completed,
+                        completed_by_employee_id: newTask.completed_by_employee_id,
+                        completed_by_name: newTask.completed_by_name,
+                        completed_at: newTask.completed_at,
+                        Imprescindible: newTask.Imprescindible || 'No',
+                        Subtareas: newTask.Subtareas || '',
+                        subtasks_state: newTask.subtasks_state || [],
+                        is_urgent: newTask.is_urgent || false,
+                        urgent_acknowledged: newTask.urgent_acknowledged || false
+                    };
+                    
+                    if (!dailyTasks.some(d => d.id === mappedTask.id)) {
+                        dailyTasks.push(mappedTask);
+                        saveLocalDatabase();
+                        
+                        // If it's an urgent task, trigger alert
+                        if (mappedTask.is_urgent) {
+                            triggerUrgentAlertIfApplicable(mappedTask);
+                        }
+                        
+                        if (currentUser) {
+                            if (currentUser.is_admin) {
+                                renderAdminMonitoreo();
+                            } else {
+                                refreshEmployeeTasksUI();
+                            }
+                        }
+                    }
+                } else if (payload.eventType === 'UPDATE') {
+                    const updatedTask = payload.new;
+                    if (!updatedTask) return;
+                    
+                    const mappedTask = {
+                        id: updatedTask.id,
+                        date: updatedTask.date,
+                        shift: updatedTask.shift,
+                        task_name: updatedTask.task_name,
+                        role_name: updatedTask.role_name,
+                        completed: updatedTask.completed,
+                        completed_by_employee_id: updatedTask.completed_by_employee_id,
+                        completed_by_name: updatedTask.completed_by_name,
+                        completed_at: updatedTask.completed_at,
+                        Imprescindible: updatedTask.Imprescindible || 'No',
+                        Subtareas: updatedTask.Subtareas || '',
+                        subtasks_state: updatedTask.subtasks_state || [],
+                        is_urgent: updatedTask.is_urgent || false,
+                        urgent_acknowledged: updatedTask.urgent_acknowledged || false
+                    };
+                    
+                    const idx = dailyTasks.findIndex(d => d.id === mappedTask.id);
+                    if (idx > -1) {
+                        dailyTasks[idx] = mappedTask;
+                        saveLocalDatabase();
+                        
+                        if (currentUser) {
+                            if (currentUser.is_admin) {
+                                renderAdminMonitoreo();
+                            } else {
+                                refreshEmployeeTasksUI();
+                            }
+                        }
+                    }
+                } else if (payload.eventType === 'DELETE') {
+                    const oldTask = payload.old;
+                    if (!oldTask || !oldTask.id) return;
+                    
+                    const idx = dailyTasks.findIndex(d => d.id == oldTask.id);
+                    if (idx > -1) {
+                        dailyTasks.splice(idx, 1);
+                        saveLocalDatabase();
+                        
+                        if (currentUser) {
+                            if (currentUser.is_admin) {
+                                renderAdminMonitoreo();
+                            } else {
+                                refreshEmployeeTasksUI();
+                            }
+                        }
+                    }
                 }
             }
         )
         .subscribe();
+}
+
+async function deleteActiveTask(taskId) {
+    if (!confirm("¿Estás seguro de que deseas eliminar esta tarea activa para el día de hoy?")) return;
+
+    const idx = dailyTasks.findIndex(d => d.id === taskId);
+    if (idx === -1) return;
+
+    dailyTasks.splice(idx, 1);
+    saveLocalDatabase();
+
+    // Sincronizar borrado con Supabase
+    if (supabase) {
+        try {
+            const { error } = await supabase
+                .from('roods_daily_tasks')
+                .delete()
+                .eq('id', taskId);
+            if (error) throw error;
+            showNotification("🗑️ Tarea eliminada correctamente.");
+        } catch (e) {
+            console.error("Failed to delete task from Supabase:", e);
+            showNotification("⚠️ Tarea eliminada localmente (Offline).");
+        }
+    } else {
+        showNotification("🗑️ Tarea eliminada localmente.");
+    }
+
+    renderAdminMonitoreo();
+}
+
+async function addQuickTask(empId, roleKey, shift, roleName) {
+    const inputId = empId === 'collab' ? `quickTaskName-collab-${shift}` : `quickTaskName-${empId}-${roleKey}`;
+    const checkId = empId === 'collab' ? `quickTaskMandatory-collab-${shift}` : `quickTaskMandatory-${empId}-${roleKey}`;
+
+    const input = document.getElementById(inputId);
+    const check = document.getElementById(checkId);
+    
+    if (!input) return;
+    const taskName = input.value.trim();
+    if (!taskName) {
+        alert("Por favor escribe la descripción de la tarea.");
+        return;
+    }
+
+    const isMandatory = check && check.checked ? "Si" : "No";
+    const todayStr = formatDateString(new Date());
+
+    const newQuickTask = {
+        id: Date.now() + Math.random().toString(36).substr(2, 9),
+        date: todayStr,
+        shift: shift,
+        role_name: roleName,
+        task_name: taskName,
+        completed: false,
+        completed_by_employee_id: null,
+        completed_by_name: null,
+        completed_at: null,
+        Imprescindible: isMandatory,
+        Subtareas: "",
+        subtasks_state: [],
+        is_urgent: false,
+        urgent_acknowledged: false
+    };
+
+    dailyTasks.push(newQuickTask);
+    saveLocalDatabase();
+
+    // Clear inputs
+    input.value = "";
+    if (check) check.checked = false;
+
+    showNotification("➕ Tarea agregada para hoy.");
+    renderAdminMonitoreo();
+
+    if (supabase) {
+        try {
+            const { error } = await supabase.from('roods_daily_tasks').insert(newQuickTask);
+            if (error) throw error;
+        } catch (e) {
+            console.error("Failed to sync quick task to Supabase:", e);
+            showNotification("⚠️ Tarea agregada localmente (Offline).");
+        }
+    }
 }
 
 // --- PROFILE MODAL ACTIONS ---
@@ -2607,7 +2812,7 @@ function loadSupabaseDynamically() {
                 supabase = window.supabase.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.key);
                 console.log("Supabase client loaded dynamically.");
                 syncFromCloud();
-                subscribeToUrgentTasks();
+                subscribeToAllDailyTasks();
                 subscribeToMuroMessages();
             }
         } catch (e) {
