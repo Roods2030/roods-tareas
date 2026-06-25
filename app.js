@@ -239,12 +239,14 @@ async function syncFromCloud() {
 async function pushToCloudTable(tableName, data) {
     if (!supabase) return;
     try {
-        const { error } = await supabase.from(tableName).upsert(data);
+        const payload = Array.isArray(data) ? data : [data];
+        const { error } = await supabase.from(tableName).upsert(payload);
         if (error) throw error;
         setSyncIndicator("Cambio Sincronizado", "");
     } catch (e) {
         console.warn(`Could not sync table ${tableName} to cloud:`, e);
         setSyncIndicator("Offline (Local)", "");
+        showNotification(`⚠️ Error al sincronizar ${tableName}: ${e.message || JSON.stringify(e)}`, 8000);
     }
 }
 
@@ -2128,7 +2130,17 @@ function submitEmployeeForm(e) {
             employees[idx].name = nameVal;
             employees[idx].pin = pinVal;
             employees[idx].is_admin = isAdminVal;
-            pushToCloudTable('roods_employees', employees[idx]);
+            
+            // Clean object to avoid sending read-only or extra database properties (like created_at)
+            const pushObj = {
+                id: employees[idx].id,
+                name: employees[idx].name,
+                pin: employees[idx].pin,
+                is_admin: employees[idx].is_admin,
+                photo: employees[idx].photo || null,
+                nickname: employees[idx].nickname || null
+            };
+            pushToCloudTable('roods_employees', pushObj);
         }
     } else {
         // Add Mode
@@ -2136,7 +2148,9 @@ function submitEmployeeForm(e) {
             id: Date.now(),
             name: nameVal,
             pin: pinVal,
-            is_admin: isAdminVal
+            is_admin: isAdminVal,
+            photo: null,
+            nickname: null
         };
         employees.push(newEmp);
         pushToCloudTable('roods_employees', newEmp);
@@ -2695,7 +2709,7 @@ async function submitProfileForm(event) {
             if (error) throw error;
         } catch (e) {
             console.error("Failed to sync profile to cloud:", e);
-            showNotification("⚠️ Perfil guardado localmente (Offline).");
+            showNotification(`⚠️ Error al sincronizar perfil: ${e.message || JSON.stringify(e)}`, 8000);
         }
     }
 }
