@@ -1994,6 +1994,31 @@ function importCsv(event) {
     event.target.value = "";
 }
 
+async function clearAllTaskTemplates() {
+    if (!confirm("⚠️ ¿Estás seguro de que deseas eliminar TODAS las tareas preestablecidas? Esta acción no se puede deshacer y vaciará las plantillas de la base de datos.")) {
+        return;
+    }
+    
+    taskTemplates = [];
+    saveLocalDatabase();
+    
+    if (supabase) {
+        try {
+            const { error } = await supabase.from('roods_task_templates').delete().neq('id', 0);
+            if (error) throw error;
+            showNotification("🗑️ Todas las tareas base han sido eliminadas de la nube.");
+        } catch (e) {
+            console.error("Error clearing templates from cloud:", e);
+            showNotification(`⚠️ Eliminado localmente, pero falló sincronización: ${e.message || JSON.stringify(e)}`, 8000);
+        }
+    } else {
+        showNotification("🗑️ Todas las tareas base han sido eliminadas localmente.");
+    }
+    
+    renderAdminCsvView();
+}
+
+
 function parseTasksCsv(csvText) {
     try {
         const lines = csvText.split(/\r?\n/).filter(l => l.trim() !== "");

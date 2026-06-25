@@ -333,12 +333,13 @@
                     </div>
                     <p class="description">Administra las tareas base directamente en la tabla o expórtalas/impórtalas en formato CSV si prefieres hojas de cálculo.</p>
                     
-                    <div class="csv-actions-box" style="margin-top: 15px;">
+                    <div class="csv-actions-box" style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                         <button class="btn-small" onclick="downloadTemplateCsv()">Descargar Plantilla CSV 📥</button>
-                        <div class="file-upload-wrapper">
-                            <label for="importCsvFile" class="btn-small btn-outline" style="padding: 6px 12px; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(0,0,0,0.1);">Importar Archivo CSV 📤</label>
+                        <div class="file-upload-wrapper" style="margin: 0;">
+                            <label for="importCsvFile" class="btn-small btn-outline" style="padding: 6px 12px; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(0,0,0,0.1); margin: 0; cursor: pointer; display: inline-block;">Importar Archivo CSV 📤</label>
                             <input type="file" id="importCsvFile" accept=".csv" class="hidden-file-input" onchange="importCsv(event)">
                         </div>
+                        <button class="btn-delete-small" style="padding: 6px 12px; font-weight: 700; border-radius: 8px; margin: 0;" onclick="clearAllTaskTemplates()">Vaciar Tareas Preestablecidas 🗑️</button>
                     </div>
                     <div class="table-container" style="max-height: 450px; overflow-y: auto;">
                         <table class="admin-table">
