@@ -4,7 +4,7 @@ const CLOUD_CONFIG = {
     key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlseGRteHV2c2Vma3FpamVvZGx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyOTQzNDAsImV4cCI6MjA5MTg3MDM0MH0.9R2bGdEKX-Jdtjcp0OW7Mq63XX7bVPWhR9pB_FC98dI'
 };
 
-let supabase = null;
+let supabaseClient = null;
 
 // --- ROODS 8 Roles Configuration with Schedules ---
 const ROODS_ROLES = {
@@ -206,12 +206,12 @@ function saveLocalDatabase() {
 
 // --- Supabase Cloud Sync Syncing ---
 async function syncFromCloud() {
-    if (!supabase) return;
+    if (!supabaseClient) return;
     setSyncIndicator("Sincronizando...", "sync-active");
     
     try {
         // 1. Sync Employees
-        const { data: dbEmp, error: errEmp } = await supabase.from('roods_employees').select('*');
+        const { data: dbEmp, error: errEmp } = await supabaseClient.from('roods_employees').select('*');
         if (errEmp) throw errEmp;
         if (dbEmp && dbEmp.length > 0) {
             employees = dbEmp;
@@ -219,7 +219,7 @@ async function syncFromCloud() {
         }
 
         // 2. Sync Weekly Roles
-        const { data: dbRoles, error: errRoles } = await supabase.from('roods_weekly_roles').select('*');
+        const { data: dbRoles, error: errRoles } = await supabaseClient.from('roods_weekly_roles').select('*');
         if (errRoles) throw errRoles;
         if (dbRoles) {
             weeklyRoles = {};
@@ -232,7 +232,7 @@ async function syncFromCloud() {
         }
 
         // 3. Sync Attendance
-        const { data: dbAtt, error: errAtt } = await supabase.from('roods_attendance').select('*');
+        const { data: dbAtt, error: errAtt } = await supabaseClient.from('roods_attendance').select('*');
         if (errAtt) throw errAtt;
         if (dbAtt) {
             attendanceLogs = dbAtt;
@@ -240,7 +240,7 @@ async function syncFromCloud() {
         }
 
         // 4. Sync Swaps
-        const { data: dbSwaps, error: errSwaps } = await supabase.from('roods_swaps').select('*');
+        const { data: dbSwaps, error: errSwaps } = await supabaseClient.from('roods_swaps').select('*');
         if (errSwaps) throw errSwaps;
         if (dbSwaps) {
             swapRequests = dbSwaps;
@@ -248,7 +248,7 @@ async function syncFromCloud() {
         }
 
         // 5. Sync Daily Tasks
-        const { data: dbDaily, error: errDaily } = await supabase.from('roods_daily_tasks').select('*');
+        const { data: dbDaily, error: errDaily } = await supabaseClient.from('roods_daily_tasks').select('*');
         if (errDaily) throw errDaily;
         if (dbDaily) {
             dailyTasks = dbDaily;
@@ -256,7 +256,7 @@ async function syncFromCloud() {
         }
 
         // 6. Sync Task Templates
-        const { data: dbTemplates, error: errTemplates } = await supabase.from('roods_task_templates').select('*');
+        const { data: dbTemplates, error: errTemplates } = await supabaseClient.from('roods_task_templates').select('*');
         if (errTemplates) throw errTemplates;
         if (dbTemplates && dbTemplates.length > 0) {
             taskTemplates = dbTemplates;
@@ -273,10 +273,10 @@ async function syncFromCloud() {
 }
 
 async function pushToCloudTable(tableName, data) {
-    if (!supabase) return;
+    if (!supabaseClient) return;
     try {
         const payload = Array.isArray(data) ? data : [data];
-        const { error } = await supabase.from(tableName).upsert(payload);
+        const { error } = await supabaseClient.from(tableName).upsert(payload);
         if (error) throw error;
         setSyncIndicator("Cambio Sincronizado", "");
     } catch (e) {
@@ -1597,7 +1597,7 @@ function saveWeeklyRoles() {
     saveLocalDatabase();
 
     // Push weekly roles to Supabase
-    if (supabase) {
+    if (supabaseClient) {
         const pushData = [];
         for (const [roleKey, empId] of Object.entries(weeklyRoles[weekStr])) {
             pushData.push({
@@ -1798,10 +1798,10 @@ async function deleteTaskTemplate(id) {
     saveLocalDatabase();
     
     // Cloud sync
-    if (supabase) {
+    if (supabaseClient) {
         try {
             // Delete from cloud by Tarea and Rol to match
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('roods_task_templates')
                 .delete()
                 .eq('Tarea', templateToDelete.Tarea)
@@ -1856,11 +1856,11 @@ async function submitTaskTemplateForm(event) {
             saveLocalDatabase();
             
             // Cloud sync
-            if (supabase) {
+            if (supabaseClient) {
                 try {
                     // Update or upsert. First delete old if name/role changed, then insert new.
                     if (oldTarea !== tarea || oldRol !== rol) {
-                        await supabase.from('roods_task_templates').delete().eq('Tarea', oldTarea).eq('Rol', oldRol);
+                        await supabaseClient.from('roods_task_templates').delete().eq('Tarea', oldTarea).eq('Rol', oldRol);
                     }
                     
                     const dbObject = {
@@ -1877,7 +1877,7 @@ async function submitTaskTemplateForm(event) {
                         dbObject.id = Number(t.id);
                     }
                     
-                    const { error } = await supabase.from('roods_task_templates').upsert(dbObject);
+                    const { error } = await supabaseClient.from('roods_task_templates').upsert(dbObject);
                     if (error) throw error;
                     showNotification("💾 Tarea base actualizada con éxito.");
                 } catch (e) {
@@ -1904,7 +1904,7 @@ async function submitTaskTemplateForm(event) {
         saveLocalDatabase();
         
         // Cloud sync
-        if (supabase) {
+        if (supabaseClient) {
             try {
                 const dbObject = {
                     "Tarea": tarea,
@@ -1914,7 +1914,7 @@ async function submitTaskTemplateForm(event) {
                     "Imprescindible": imprescindible,
                     "Subtareas": subtareas
                 };
-                const { error } = await supabase.from('roods_task_templates').insert(dbObject);
+                const { error } = await supabaseClient.from('roods_task_templates').insert(dbObject);
                 if (error) throw error;
                 showNotification("💾 Tarea base agregada con éxito.");
             } catch (e) {
@@ -1927,9 +1927,9 @@ async function submitTaskTemplateForm(event) {
     }
     
     // Refresh templates from cloud to get real IDs if possible
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            const { data } = await supabase.from('roods_task_templates').select('*');
+            const { data } = await supabaseClient.from('roods_task_templates').select('*');
             if (data && data.length > 0) {
                 taskTemplates = data;
                 localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
@@ -1992,9 +1992,9 @@ function importCsv(event) {
         const success = parseTasksCsv(text);
         if (success) {
             saveLocalDatabase();
-            if (supabase) {
+            if (supabaseClient) {
                 // Clear templates in cloud first and insert new
-                supabase.from('roods_task_templates').delete().neq('id', 0).then(() => {
+                supabaseClient.from('roods_task_templates').delete().neq('id', 0).then(() => {
                     const dbInsertData = taskTemplates.map(t => {
                         return {
                             "Tarea": t.Tarea,
@@ -2005,11 +2005,11 @@ function importCsv(event) {
                             "Subtareas": t.Subtareas || ""
                         };
                     });
-                    supabase.from('roods_task_templates').insert(dbInsertData).then(({ error }) => {
+                    supabaseClient.from('roods_task_templates').insert(dbInsertData).then(({ error }) => {
                         if (error) {
                             console.error("Error inserting CSV templates:", error);
                         } else {
-                            supabase.from('roods_task_templates').select('*').then(({ data: freshData }) => {
+                            supabaseClient.from('roods_task_templates').select('*').then(({ data: freshData }) => {
                                 if (freshData) {
                                     taskTemplates = freshData;
                                     localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
@@ -2038,9 +2038,9 @@ async function clearAllTaskTemplates() {
     taskTemplates = [];
     saveLocalDatabase();
     
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            const { error } = await supabase.from('roods_task_templates').delete().neq('id', 0);
+            const { error } = await supabaseClient.from('roods_task_templates').delete().neq('id', 0);
             if (error) throw error;
             showNotification("🗑️ Todas las tareas base han sido eliminadas de la nube.");
         } catch (e) {
@@ -2231,8 +2231,8 @@ function deleteEmployee(empId) {
     }
 
     // Delete in cloud if Supabase exists
-    if (supabase) {
-        supabase.from('roods_employees').delete().eq('id', empId).then();
+    if (supabaseClient) {
+        supabaseClient.from('roods_employees').delete().eq('id', empId).then();
     }
 
     employees = employees.filter(e => e.id !== empId);
@@ -2277,9 +2277,9 @@ async function sendUrgentTask(event) {
     showNotification("🚨 Tarea de urgencia enviada.");
     
     // Sync to Supabase
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            const { error } = await supabase.from('roods_daily_tasks').insert(newUrgentTask);
+            const { error } = await supabaseClient.from('roods_daily_tasks').insert(newUrgentTask);
             if (error) throw error;
         } catch (e) {
             console.error("Failed to insert urgent task to Supabase:", e);
@@ -2364,9 +2364,9 @@ async function acknowledgeUrgentAlert() {
         currentUrgentAlertTask.urgent_acknowledged = true;
         saveLocalDatabase();
         
-        if (supabase) {
+        if (supabaseClient) {
             try {
-                const { error } = await supabase
+                const { error } = await supabaseClient
                     .from('roods_daily_tasks')
                     .update({ urgent_acknowledged: true })
                     .eq('id', currentUrgentAlertTask.id);
@@ -2395,9 +2395,9 @@ async function checkForUrgentTasks() {
     const schedule = resolveTodaySchedule(currentUser.id, today);
     if (!schedule) return;
     
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('roods_daily_tasks')
                 .select('*')
                 .eq('task_date', todayStr)
@@ -2479,9 +2479,9 @@ function refreshEmployeeTasksUI() {
 }
 
 function subscribeToAllDailyTasks() {
-    if (!supabase) return;
+    if (!supabaseClient) return;
     
-    supabase
+    supabaseClient
         .channel('all-daily-tasks')
         .on(
             'postgres_changes',
@@ -2592,9 +2592,9 @@ async function deleteActiveTask(taskId) {
     saveLocalDatabase();
 
     // Sincronizar borrado con Supabase
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('roods_daily_tasks')
                 .delete()
                 .eq('id', taskId);
@@ -2655,9 +2655,9 @@ async function addQuickTask(empId, roleKey, shift, roleName) {
     showNotification("➕ Tarea agregada para hoy.");
     renderAdminMonitoreo();
 
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            const { error } = await supabase.from('roods_daily_tasks').insert(newQuickTask);
+            const { error } = await supabaseClient.from('roods_daily_tasks').insert(newQuickTask);
             if (error) throw error;
         } catch (e) {
             console.error("Failed to sync quick task to Supabase:", e);
@@ -2756,7 +2756,7 @@ async function submitProfileForm(event) {
     showNotification("💾 Perfil guardado correctamente.");
 
     // Sincronizar a Supabase
-    if (supabase) {
+    if (supabaseClient) {
         try {
             const pushObj = {
                 id: currentUser.id,
@@ -2766,7 +2766,7 @@ async function submitProfileForm(event) {
                 photo: currentUser.photo || null,
                 nickname: currentUser.nickname || null
             };
-            const { error } = await supabase.from('roods_employees').upsert(pushObj);
+            const { error } = await supabaseClient.from('roods_employees').upsert(pushObj);
             if (error) throw error;
         } catch (e) {
             console.error("Failed to sync profile to cloud:", e);
@@ -2781,9 +2781,9 @@ async function loadMuroMessages() {
     const adminList = document.getElementById('adminMuroMessagesList');
     if (!list && !adminList) return;
 
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('roods_messages')
                 .select('*')
                 .order('timestamp', { ascending: false })
@@ -2902,14 +2902,14 @@ async function pushNewMuroMessage(text) {
     localStorage.setItem('roods_last_read_muro', lastReadMuroTimestamp);
     updateMuroBadge();
 
-    if (supabase) {
+    if (supabaseClient) {
         try {
             const dbObj = {
                 employee_id: newMsg.employee_id,
                 employee_name: newMsg.employee_name,
                 message: newMsg.message
             };
-            const { error } = await supabase.from('roods_messages').insert(dbObj);
+            const { error } = await supabaseClient.from('roods_messages').insert(dbObj);
             if (error) throw error;
         } catch (e) {
             console.error("Failed to post message to Supabase:", e);
@@ -2919,9 +2919,9 @@ async function pushNewMuroMessage(text) {
 }
 
 function subscribeToMuroMessages() {
-    if (!supabase) return;
+    if (!supabaseClient) return;
     
-    supabase
+    supabaseClient
         .channel('muro-messages')
         .on(
             'postgres_changes',
@@ -2950,7 +2950,7 @@ function initApp() {
     // Initialize Supabase from statically loaded local SDK
     try {
         if (window.supabase) {
-            supabase = window.supabase.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.key);
+            supabaseClient = window.supabase.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.key);
             console.log("Supabase client initialized successfully.");
             syncFromCloud();
             subscribeToAllDailyTasks();

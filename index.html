@@ -4,6 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ROODS - Tareas y Turnos</title>
+    <!-- Global JavaScript Error Catcher -->
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            // Wait for body to load if it hasn't yet
+            const showErr = function() {
+                const div = document.createElement('div');
+                div.style.position = 'fixed';
+                div.style.bottom = '0';
+                div.style.left = '0';
+                div.style.width = '100%';
+                div.style.backgroundColor = '#f44336';
+                div.style.color = 'white';
+                div.style.padding = '20px';
+                div.style.zIndex = '99999';
+                div.style.fontFamily = 'monospace';
+                div.style.fontSize = '12px';
+                div.style.boxSizing = 'border-box';
+                div.style.wordBreak = 'break-all';
+                div.innerHTML = '<strong>❌ ERROR DE JAVASCRIPT:</strong><br>' + 
+                                'Mensaje: ' + message + '<br>' +
+                                'Archivo: ' + source + '<br>' +
+                                'Línea: ' + lineno + ':' + colno + '<br>' +
+                                'Stack: ' + (error ? error.stack : 'No disponible');
+                document.body.appendChild(div);
+            };
+            if (document.body) {
+                showErr();
+            } else {
+                window.addEventListener('DOMContentLoaded', showErr);
+            }
+            return false;
+        };
+    </script>
     <!-- Outfit Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -565,7 +598,7 @@
     <!-- Supabase SDK (loaded locally to prevent CDN/blockage issues) -->
     <script src="supabase.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.0.4"></script>
+    <script src="app.js?v=1.0.6"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
