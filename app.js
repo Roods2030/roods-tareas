@@ -212,14 +212,16 @@ async function syncFromCloud() {
     try {
         // 1. Sync Employees
         const { data: dbEmp, error: errEmp } = await supabase.from('roods_employees').select('*');
-        if (!errEmp && dbEmp && dbEmp.length > 0) {
+        if (errEmp) throw errEmp;
+        if (dbEmp && dbEmp.length > 0) {
             employees = dbEmp;
             localStorage.setItem('roods_employees', JSON.stringify(employees));
         }
 
         // 2. Sync Weekly Roles
         const { data: dbRoles, error: errRoles } = await supabase.from('roods_weekly_roles').select('*');
-        if (!errRoles && dbRoles) {
+        if (errRoles) throw errRoles;
+        if (dbRoles) {
             weeklyRoles = {};
             dbRoles.forEach(r => {
                 const weekStr = r.week_start; // YYYY-MM-DD
@@ -231,28 +233,32 @@ async function syncFromCloud() {
 
         // 3. Sync Attendance
         const { data: dbAtt, error: errAtt } = await supabase.from('roods_attendance').select('*');
-        if (!errAtt && dbAtt) {
+        if (errAtt) throw errAtt;
+        if (dbAtt) {
             attendanceLogs = dbAtt;
             localStorage.setItem('roods_attendance', JSON.stringify(attendanceLogs));
         }
 
         // 4. Sync Swaps
         const { data: dbSwaps, error: errSwaps } = await supabase.from('roods_swaps').select('*');
-        if (!errSwaps && dbSwaps) {
+        if (errSwaps) throw errSwaps;
+        if (dbSwaps) {
             swapRequests = dbSwaps;
             localStorage.setItem('roods_swaps', JSON.stringify(swapRequests));
         }
 
         // 5. Sync Daily Tasks
         const { data: dbDaily, error: errDaily } = await supabase.from('roods_daily_tasks').select('*');
-        if (!errDaily && dbDaily) {
+        if (errDaily) throw errDaily;
+        if (dbDaily) {
             dailyTasks = dbDaily;
             localStorage.setItem('roods_daily_tasks', JSON.stringify(dailyTasks));
         }
 
         // 6. Sync Task Templates
         const { data: dbTemplates, error: errTemplates } = await supabase.from('roods_task_templates').select('*');
-        if (!errTemplates && dbTemplates && dbTemplates.length > 0) {
+        if (errTemplates) throw errTemplates;
+        if (dbTemplates && dbTemplates.length > 0) {
             taskTemplates = dbTemplates;
             localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
         }
@@ -262,6 +268,7 @@ async function syncFromCloud() {
     } catch (e) {
         console.error("Cloud Sync Failed, falling back to LocalStorage:", e);
         setSyncIndicator("Offline (Local)", "");
+        showNotification(`⚠️ Error al sincronizar con la nube: ${e.message || JSON.stringify(e)}`, 10000);
     }
 }
 
