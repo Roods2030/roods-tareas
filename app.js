@@ -135,33 +135,62 @@ let currentRoleViewWeekStart = getStartOfWeekWednesday(new Date());
 
 // --- Load / Save Local Database ---
 function loadLocalDatabase() {
-    console.log("Loading Local Storage database...");
-    
     // Load Employees
-    employees = JSON.parse(localStorage.getItem('roods_employees'));
-    if (!employees || employees.length === 0) {
+    try {
+        employees = JSON.parse(localStorage.getItem('roods_employees'));
+        if (!employees || !Array.isArray(employees) || employees.length === 0) {
+            employees = [...DEFAULT_EMPLOYEES];
+            localStorage.setItem('roods_employees', JSON.stringify(employees));
+        }
+    } catch (e) {
+        console.error("Error loading employees from localStorage, falling back to defaults:", e);
         employees = [...DEFAULT_EMPLOYEES];
         localStorage.setItem('roods_employees', JSON.stringify(employees));
     }
     
     // Load Weekly Roles
-    weeklyRoles = JSON.parse(localStorage.getItem('roods_weekly_roles')) || {};
+    try {
+        weeklyRoles = JSON.parse(localStorage.getItem('roods_weekly_roles')) || {};
+    } catch (e) {
+        console.error("Error loading weekly roles, resetting:", e);
+        weeklyRoles = {};
+    }
     
     // Load Attendance
-    attendanceLogs = JSON.parse(localStorage.getItem('roods_attendance')) || [];
+    try {
+        attendanceLogs = JSON.parse(localStorage.getItem('roods_attendance')) || [];
+    } catch (e) {
+        console.error("Error loading attendance, resetting:", e);
+        attendanceLogs = [];
+    }
     
     // Load Swap Requests
-    swapRequests = JSON.parse(localStorage.getItem('roods_swaps')) || [];
+    try {
+        swapRequests = JSON.parse(localStorage.getItem('roods_swaps')) || [];
+    } catch (e) {
+        console.error("Error loading swaps, resetting:", e);
+        swapRequests = [];
+    }
     
     // Load Daily Instantiated Tasks
-    dailyTasks = JSON.parse(localStorage.getItem('roods_daily_tasks')) || [];
+    try {
+        dailyTasks = JSON.parse(localStorage.getItem('roods_daily_tasks')) || [];
+    } catch (e) {
+        console.error("Error loading daily tasks, resetting:", e);
+        dailyTasks = [];
+    }
     
     // Load Task Templates
-    const savedTemplates = localStorage.getItem('roods_task_templates');
-    if (savedTemplates) {
-        taskTemplates = JSON.parse(savedTemplates);
-    } else {
-        // Parse default CSV
+    try {
+        const savedTemplates = localStorage.getItem('roods_task_templates');
+        if (savedTemplates) {
+            taskTemplates = JSON.parse(savedTemplates);
+        } else {
+            // Parse default CSV
+            parseTasksCsv(DEFAULT_TASKS_CSV);
+        }
+    } catch (e) {
+        console.error("Error loading task templates, resetting:", e);
         parseTasksCsv(DEFAULT_TASKS_CSV);
     }
 }
