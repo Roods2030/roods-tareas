@@ -2906,34 +2906,27 @@ function subscribeToMuroMessages() {
         .subscribe();
 }
 
-// --- Dynamic SDK Loading ---
-function loadSupabaseDynamically() {
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
-    script.onload = () => {
-        try {
-            if (window.supabase) {
-                supabase = window.supabase.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.key);
-                console.log("Supabase client loaded dynamically.");
-                syncFromCloud();
-                subscribeToAllDailyTasks();
-                subscribeToMuroMessages();
-            }
-        } catch (e) {
-            console.error("Supabase failed to initialize:", e);
-        }
-    };
-    script.onerror = () => {
-        console.warn("Offline mode: Could not load Supabase SDK. Local database only.");
-    };
-    document.head.appendChild(script);
-}
-
 // --- APP STARTUP ---
 function initApp() {
     loadLocalDatabase();
     startClock();
-    loadSupabaseDynamically();
+    
+    // Initialize Supabase from statically loaded SDK
+    try {
+        if (window.supabase) {
+            supabase = window.supabase.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.key);
+            console.log("Supabase client initialized successfully.");
+            syncFromCloud();
+            subscribeToAllDailyTasks();
+            subscribeToMuroMessages();
+        } else {
+            console.warn("Supabase SDK not loaded statically. Running in local/offline mode.");
+            setSyncIndicator("Offline (Local)", "");
+        }
+    } catch (e) {
+        console.error("Supabase failed to initialize:", e);
+        setSyncIndicator("Offline (Local)", "");
+    }
     
     // Check and poll for urgent tasks every 5 seconds
     setInterval(checkForUrgentTasks, 5000);
