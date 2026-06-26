@@ -66,6 +66,7 @@ create table if not exists public.roods_daily_tasks (
     "Subtareas" text,
     subtasks_state jsonb default '[]'::jsonb,
     is_urgent boolean default false not null,
+    urgent_acknowledged boolean default false not null,
     assigned_employee_id bigint references public.roods_employees(id) on delete set null,
     assigned_role text, -- 'Todos' o rol específico
     created_at timestamp with time zone default timezone('utc'::text, now()) not null

@@ -20,3 +20,6 @@ create table if not exists public.roods_messages (
 
 -- 4. Activar replicación en tiempo real para la tabla de mensajes
 alter publication supabase_realtime add table public.roods_messages;
+
+-- 5. Añadir columna para acuse de recibo de tareas urgentes
+alter table public.roods_daily_tasks add column if not exists urgent_acknowledged boolean default false not null;
