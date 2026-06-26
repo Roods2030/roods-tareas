@@ -2936,24 +2936,30 @@ function subscribeToMuroMessages() {
 }
 
 // --- APP STARTUP ---
+function initSupabaseOnLoad() {
+    if (window.supabase && !supabase) {
+        try {
+            supabase = window.supabase.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.key);
+            console.log("Supabase client initialized via onload trigger.");
+            syncFromCloud();
+            subscribeToAllDailyTasks();
+            subscribeToMuroMessages();
+        } catch (e) {
+            console.error("Supabase failed to initialize on load:", e);
+            setSyncIndicator("Offline (Local)", "");
+        }
+    }
+}
+
 function initApp() {
     loadLocalDatabase();
     startClock();
     
-    // Initialize Supabase from statically loaded SDK
-    try {
-        if (window.supabase) {
-            supabase = window.supabase.createClient(CLOUD_CONFIG.url, CLOUD_CONFIG.key);
-            console.log("Supabase client initialized successfully.");
-            syncFromCloud();
-            subscribeToAllDailyTasks();
-            subscribeToMuroMessages();
-        } else {
-            console.warn("Supabase SDK not loaded statically. Running in local/offline mode.");
-            setSyncIndicator("Offline (Local)", "");
-        }
-    } catch (e) {
-        console.error("Supabase failed to initialize:", e);
+    // Initialize Supabase if it loaded before app.js did
+    if (window.supabase && !supabase) {
+        initSupabaseOnLoad();
+    } else if (!supabase) {
+        console.log("Waiting for Supabase SDK to load...");
         setSyncIndicator("Offline (Local)", "");
     }
     

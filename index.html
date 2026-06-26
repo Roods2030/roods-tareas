@@ -562,10 +562,10 @@
         <button id="notificationClose" class="notification-close-btn" onclick="hideNotification()">✖</button>
     </div>
 
-    <!-- Supabase SDK (loaded statically to prevent PWA/CSP blockages) -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Supabase SDK (loaded asynchronously to prevent blocking app.js startup) -->
+    <script async src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" onload="initSupabaseOnLoad()"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.0.1"></script>
+    <script src="app.js?v=1.0.2"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
