@@ -213,7 +213,7 @@ async function syncFromCloud() {
         // 1. Sync Employees
         const { data: dbEmp, error: errEmp } = await supabaseClient.from('roods_employees').select('*');
         if (errEmp) throw errEmp;
-        if (dbEmp && dbEmp.length > 0) {
+        if (dbEmp) {
             employees = dbEmp;
             localStorage.setItem('roods_employees', JSON.stringify(employees));
         }
@@ -258,7 +258,7 @@ async function syncFromCloud() {
         // 6. Sync Task Templates
         const { data: dbTemplates, error: errTemplates } = await supabaseClient.from('roods_task_templates').select('*');
         if (errTemplates) throw errTemplates;
-        if (dbTemplates && dbTemplates.length > 0) {
+        if (dbTemplates) {
             taskTemplates = dbTemplates;
             localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
         }
