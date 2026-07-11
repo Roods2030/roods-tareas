@@ -1,32 +1,32 @@
-Tarea,Rol,Turno,Dias,Imprescindible,Subtareas
-Contar fondo de caja inicial (apertura),Cajera,Matutino,Todos,Si,
-Limpieza de barra de atención y mesas de clientes,Cajera,Ambos,Todos,No,
-Recibir y acomodar pan fresco del día,Cajera,Matutino,Todos,No,Croissants;Conchas;Mantecadas;Birotes;Donas
-Limpieza y desinfección de la pantalla POS y terminales de pago,Cajera,Vespertino,Todos,No,
-Corte de caja, arqueo de efectivo y resguardo de valores (cierre),Cajera,Vespertino,Todos,Si,
-Calibración de molinos (peso y tiempo de extracción),Barista,Matutino,Todos,No,
-Encendido y calentamiento de la máquina de espresso,Barista,Matutino,Todos,No,
-Rellenar tolvas de café en grano e insumos de barra (leches y jarabes),Barista,Ambos,Todos,No,Café en grano;Leche entera;Leche deslactosada;Leche de almendra;Jarabe vainilla;Jarabe caramelo
-Limpieza profunda de lancetas de vapor de la máquina de café,Barista,Vespertino,Todos,Si,
-Lavado químico de filtros, portafiltros y duchas de espresso (backflush),Barista,Vespertino,Todos,Si,
-Desarmado y limpieza interna del molino de café,Barista,Vespertino,Lunes,No,
-Limpieza de barra de café, rejillas y sacudidores,Barista,Vespertino,Todos,No,
-Sanitización de superficies de trabajo y utensilios en cocina,Cocina,Ambos,Todos,No,
-Encendido de plancha, hornos y salamandra (apertura),Cocina,Matutino,Todos,No,
-Preparación y porcionado de ingredientes (prep de verduras y proteínas),Cocina,Matutino,Todos,No,Picar jitomate;Picar cebolla;Picar lechuga;Rebanar jamón;Cocinar tocino
-Control y registro de temperaturas de refrigeradores y congeladores,Cocina,Matutino,Todos,Si,
-Limpieza profunda de plancha, estufa y campana de extracción,Cocina,Vespertino,Todos,No,
-Lavado y sanitización de utensilios y loza de cocina (cierre),Cocina,Vespertino,Todos,No,
-Retirar basura de cocina y desinfectar botes,Cocina,Vespertino,Todos,No,
-Apagar plancha, hornos y salamandra (cierre),Cocina,Vespertino,Todos,Si,
-Ir por compras locales del día (tiendita/verdulería),Cocina,Matutino,Todos,No,Comprar leche entera (6L);Comprar limones (1kg);Comprar aguacate (2kg);Comprar azúcar (2kg)
-Lavado profundo de loza y cristalería acumulada,Apoyo,Ambos,Fin de Semana,No,
-Apoyar en el servicio a mesas y entrega de pedidos a clientes,Apoyo,Ambos,Fin de Semana,No,
-Limpieza y desinfección de sanitarios de clientes y personal,Apoyo,Ambos,Fin de Semana,No,Espejos;Inodoros;Lavabos;Toallas de papel;Jabón de manos
-Rellenar servilleteros, cubiertos y estación de condimentos,Apoyo,Ambos,Fin de Semana,No,
-Barrer y trapear el salón principal y terraza de la cafetería,Colaborativa,Ambos,Todos,No,
-Limpieza de vidrios y puertas de acceso de la sucursal,Colaborativa,Matutino,Miércoles,No,
-Sacar basura general de salón al contenedor externo (cierre),Colaborativa,Vespertino,Todos,Si,
-Restablecer inventario de vasos, tapas, mangas y bolsas para llevar,Colaborativa,Vespertino,Todos,No,
-Lavado profundo de trampas de grasa e hidráulica de cocina,Colaborativa,Vespertino,Lunes,Si,
-Desinfección de menús físicos y estaciones de servicio,Colaborativa,Ambos,Todos,No,
+Tarea,Rol,Dias,Imprescindible,Subtareas
+Contar fondo de caja inicial (apertura),Cajera,Todos,Si,
+Limpieza de barra de atención y mesas de clientes,Cajera,Todos,No,
+Recibir y acomodar pan fresco del día,Cajera,Todos,No,Croissants;Conchas;Mantecadas;Birotes;Donas
+Limpieza y desinfección de la pantalla POS y terminales de pago,Cajera,Todos,No,
+Corte de caja, arqueo de efectivo y resguardo de valores (cierre),Vespertino,Todos,Si,
+Calibración de molinos (peso y tiempo de extracción),Barista,Todos,No,
+Encendido y calentamiento de la máquina de espresso,Barista,Todos,No,
+Rellenar tolvas de café en grano e insumos de barra (leches y jarabes),Barista,Todos,No,Café en grano;Leche entera;Leche deslactosada;Leche de almendra;Jarabe vainilla;Jarabe caramelo
+Limpieza profunda de lancetas de vapor de la máquina de café,Barista,Todos,Si,
+Lavado químico de filtros, portafiltros y duchas de espresso (backflush),Vespertino,Todos,Si,
+Desarmado y limpieza interna del molino de café,Barista,Lunes,No,
+Limpieza de barra de café, rejillas y sacudidores,Vespertino,Todos,No,
+Sanitización de superficies de trabajo y utensilios en cocina,Cocina,Todos,No,
+Encendido de plancha, hornos y salamandra (apertura),Matutino,Todos,No,
+Preparación y porcionado de ingredientes (prep de verduras y proteínas),Cocina,Todos,No,Picar jitomate;Picar cebolla;Picar lechuga;Rebanar jamón;Cocinar tocino
+Control y registro de temperaturas de refrigeradores y congeladores,Cocina,Todos,Si,
+Limpieza profunda de plancha, estufa y campana de extracción,Vespertino,Todos,No,
+Lavado y sanitización de utensilios y loza de cocina (cierre),Cocina,Todos,No,
+Retirar basura de cocina y desinfectar botes,Cocina,Todos,No,
+Apagar plancha, hornos y salamandra (cierre),Vespertino,Todos,Si,
+Ir por compras locales del día (tiendita/verdulería),Cocina,Todos,No,Comprar leche entera (6L);Comprar limones (1kg);Comprar aguacate (2kg);Comprar azúcar (2kg)
+Lavado profundo de loza y cristalería acumulada,Apoyo,Fin de Semana,No,
+Apoyar en el servicio a mesas y entrega de pedidos a clientes,Apoyo,Fin de Semana,No,
+Limpieza y desinfección de sanitarios de clientes y personal,Apoyo,Fin de Semana,No,Espejos;Inodoros;Lavabos;Toallas de papel;Jabón de manos
+Rellenar servilleteros, cubiertos y estación de condimentos,Ambos,Fin de Semana,No,
+Barrer y trapear el salón principal y terraza de la cafetería,Colaborativa,Todos,No,
+Limpieza de vidrios y puertas de acceso de la sucursal,Colaborativa,Miércoles,No,
+Sacar basura general de salón al contenedor externo (cierre),Colaborativa,Todos,Si,
+Restablecer inventario de vasos, tapas,Colaborativa,Vespertino,Todos,No,
+Lavado profundo de trampas de grasa e hidráulica de cocina,Colaborativa,Lunes,Si,
+Desinfección de menús físicos y estaciones de servicio,Colaborativa,Todos,No,
