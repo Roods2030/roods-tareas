@@ -256,7 +256,7 @@ async function syncFromCloud() {
         }
 
         // 6. Sync Task Templates
-        const { data: dbTemplates, error: errTemplates } = await supabaseClient.from('roods_task_templates').select('*');
+        const { data: dbTemplates, error: errTemplates } = await supabaseClient.from('roods_task_templates').select('*').order('id', { ascending: true });
         if (errTemplates) throw errTemplates;
         if (dbTemplates) {
             taskTemplates = dbTemplates;
@@ -853,13 +853,30 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
 
     // Filter today's tasks for active shifts
     const activeShifts = [...new Set(schedules.map(s => s.shift))];
-    const todayTasks = dailyTasks.filter(d => d.date === dateStr && activeShifts.includes(d.shift));
+    const todayTasks = dailyTasks.filter(d => {
+        if (d.date !== dateStr) return false;
+        if (d.shift === 'Ambos' || d.shift === 'Todos') return true;
+        if (activeShifts.includes(d.shift)) return true;
+        if (d.shift.toLowerCase() === 'apertura' && activeShifts.includes('Matutino')) return true;
+        if (d.shift.toLowerCase() === 'cierre' && activeShifts.includes('Vespertino')) return true;
+        return false;
+    });
 
     // Individual tasks matching user's active roles
-    const myTasks = todayTasks.filter(t => activeRolesList.includes(t.role_name));
+    const myTasks = todayTasks.filter(t => activeRolesList.includes(t.role_name) || t.role_name === 'Todos');
     
-    // Collaborative tasks for active shifts
+    // Collaborative tasks
     const collabTasks = todayTasks.filter(t => t.role_name === 'Colaborativa');
+
+    // Sort function based on original template order
+    const templateOrderSort = (a, b) => {
+        const idxA = taskTemplates.findIndex(tmpl => tmpl['Tarea'] === a.task_name && tmpl['Rol'] === a.role_name && tmpl['Turno'] === a.shift);
+        const idxB = taskTemplates.findIndex(tmpl => tmpl['Tarea'] === b.task_name && tmpl['Rol'] === b.role_name && tmpl['Turno'] === b.shift);
+        return (idxA !== -1 ? idxA : 999999) - (idxB !== -1 ? idxB : 999999);
+    };
+
+    myTasks.sort(templateOrderSort);
+    collabTasks.sort(templateOrderSort);
 
     // Render My Tasks
     if (myTasks.length === 0) {
