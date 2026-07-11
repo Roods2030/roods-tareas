@@ -97,7 +97,7 @@ const DEFAULT_EMPLOYEES = [
 ];
 
 // Default tasks if CSV is empty
-const DEFAULT_TASKS_CSV = `Tarea,Rol,Turno,Dias,Imprescindible,Subtareas
+const DEFAULT_TASKS_CSV = `Tarea,Rol,Dias,Imprescindible,Subtareas
 Contar fondo de caja inicial (apertura),Cajera,Matutino,Todos,Si,
 Limpieza de barra de atención y mesas de clientes,Cajera,Ambos,Todos,No,
 Recibir y acomodar pan fresco del día,Cajera,Matutino,Todos,No,Croissants;Conchas;Mantecadas;Birotes;Donas
@@ -870,8 +870,8 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
 
     // Sort function based on original template order
     const templateOrderSort = (a, b) => {
-        const idxA = taskTemplates.findIndex(tmpl => tmpl['Tarea'] === a.task_name && tmpl['Rol'] === a.role_name && tmpl['Turno'] === a.shift);
-        const idxB = taskTemplates.findIndex(tmpl => tmpl['Tarea'] === b.task_name && tmpl['Rol'] === b.role_name && tmpl['Turno'] === b.shift);
+        const idxA = taskTemplates.findIndex(tmpl => tmpl['Tarea'] === a.task_name && tmpl['Rol'] === a.role_name);
+        const idxB = taskTemplates.findIndex(tmpl => tmpl['Tarea'] === b.task_name && tmpl['Rol'] === b.role_name);
         return (idxA !== -1 ? idxA : 999999) - (idxB !== -1 ? idxB : 999999);
     };
 
@@ -1724,7 +1724,7 @@ function renderAdminCsvView() {
         tr.innerHTML = `
             <td class="bold-label">${t.Tarea}</td>
             <td><span class="badge" style="background-color: #673ab7; font-weight:700; margin:0;">${t.Rol}</span></td>
-            <td>${t.Turno}</td>
+            
             <td>${t.Dias}</td>
             <td><span style="font-weight:600; color: ${impVal === 'Si' ? '#e91e63' : '#666'}">${impVal}</span></td>
             <td><span style="font-size:0.85rem; color: #555;">${subsText}</span></td>
@@ -1772,7 +1772,7 @@ function openTaskTemplateModal(id = null) {
         document.getElementById('editTaskTemplateId').value = t.id;
         document.getElementById('templateTaskName').value = t.Tarea;
         document.getElementById('templateRole').value = t.Rol;
-        document.getElementById('templateShift').value = t.Turno;
+        
         
         // Days resolution
         const daysSelect = document.getElementById('templateDaysSelect');
@@ -1844,7 +1844,7 @@ async function submitTaskTemplateForm(event) {
     const id = document.getElementById('editTaskTemplateId').value;
     const tarea = document.getElementById('templateTaskName').value.trim();
     const rol = document.getElementById('templateRole').value;
-    const turno = document.getElementById('templateShift').value;
+    
     
     const daysSelect = document.getElementById('templateDaysSelect').value;
     const customDays = document.getElementById('templateCustomDays').value.trim();
@@ -1865,7 +1865,7 @@ async function submitTaskTemplateForm(event) {
             
             t.Tarea = tarea;
             t.Rol = rol;
-            t.Turno = turno;
+            
             t.Dias = dias;
             t.Imprescindible = imprescindible;
             t.Subtareas = subtareas;
@@ -1883,7 +1883,7 @@ async function submitTaskTemplateForm(event) {
                     const dbObject = {
                         "Tarea": tarea,
                         "Rol": rol,
-                        "Turno": turno,
+                        
                         "Dias": dias,
                         "Imprescindible": imprescindible,
                         "Subtareas": subtareas
@@ -1911,7 +1911,7 @@ async function submitTaskTemplateForm(event) {
             id: Date.now(),
             Tarea: tarea,
             Rol: rol,
-            Turno: turno,
+            
             Dias: dias,
             Imprescindible: imprescindible,
             Subtareas: subtareas
@@ -1926,7 +1926,7 @@ async function submitTaskTemplateForm(event) {
                 const dbObject = {
                     "Tarea": tarea,
                     "Rol": rol,
-                    "Turno": turno,
+                    
                     "Dias": dias,
                     "Imprescindible": imprescindible,
                     "Subtareas": subtareas
@@ -1961,7 +1961,7 @@ async function submitTaskTemplateForm(event) {
 }
 
 function downloadTemplateCsv() {
-    let csvContent = "Tarea,Rol,Turno,Dias,Imprescindible,Subtareas\n";
+    let csvContent = "Tarea,Rol,Dias,Imprescindible,Subtareas\n";
     
     if (taskTemplates.length > 0) {
         taskTemplates.forEach(t => {
@@ -1969,10 +1969,10 @@ function downloadTemplateCsv() {
             const impVal = t.Imprescindible || "No";
             const subsVal = t.Subtareas || "";
             const escapedSubs = subsVal.replace(/"/g, '""');
-            csvContent += `"${escapedTask}",${t.Rol},${t.Turno},${t.Dias},${impVal},"${escapedSubs}"\n`;
+            csvContent += `"${escapedTask}",${t.Rol},${t.Dias},${impVal},"${escapedSubs}"\n`;
         });
     } else {
-        csvContent += DEFAULT_TASKS_CSV.replace("Tarea,Rol,Turno,Dias,Imprescindible,Subtareas\n", "");
+        csvContent += DEFAULT_TASKS_CSV.replace("Tarea,Rol,Dias,Imprescindible,Subtareas\n", "");
     }
 
     try {
@@ -2016,7 +2016,7 @@ function importCsv(event) {
                         return {
                             "Tarea": t.Tarea,
                             "Rol": t.Rol,
-                            "Turno": t.Turno,
+                            
                             "Dias": t.Dias,
                             "Imprescindible": t.Imprescindible || "No",
                             "Subtareas": t.Subtareas || ""
@@ -2040,7 +2040,7 @@ function importCsv(event) {
             renderAdminCsvView();
             showNotification("📤 Archivo CSV importado con éxito.");
         } else {
-            alert("Error al procesar el archivo CSV. Asegúrate de tener los encabezados correctos: Tarea, Rol, Turno, Dias");
+            alert("Error al procesar el archivo CSV. Asegúrate de tener los encabezados correctos: Tarea, Rol, Dias");
         }
     };
     reader.readAsText(file);
@@ -2080,7 +2080,7 @@ function parseTasksCsv(csvText) {
         const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
         const taskIdx = headers.indexOf("tarea");
         const roleIdx = headers.indexOf("rol");
-        const shiftIdx = headers.indexOf("turno");
+        
         const daysIdx = headers.indexOf("dias");
         const impIdx = headers.indexOf("imprescindible");
         const subsIdx = headers.indexOf("subtareas");
@@ -2101,7 +2101,7 @@ function parseTasksCsv(csvText) {
                 templates.push({
                     Tarea: parts[taskIdx].trim(),
                     Rol: parts[roleIdx].trim(),
-                    Turno: parts[shiftIdx].trim(),
+                    Turno: 'N/A',
                     Dias: parts[daysIdx].trim(),
                     Imprescindible: impVal,
                     Subtareas: subsVal
