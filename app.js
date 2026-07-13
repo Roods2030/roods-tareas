@@ -862,13 +862,12 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
         return false;
     });
 
-    // Flexible role matching function
+    // Strict role matching function (ignores case and spaces to be safe)
     const isRoleMatch = (taskRole, activeRoles) => {
-        if (taskRole === 'Todos') return true;
-        if (activeRoles.includes(taskRole)) return true;
-        // Check for combined roles in CSV (e.g. "Cajero - Barista" or "Cajero y Barista")
-        const parts = taskRole.split(/[-/y,]/).map(p => p.trim()).filter(p => p);
-        return parts.some(p => activeRoles.some(ar => ar.toLowerCase() === p.toLowerCase()));
+        if (taskRole.toLowerCase().trim() === 'todos') return true;
+        
+        const normalizedTaskRole = taskRole.toLowerCase().replace(/\s+/g, '');
+        return activeRoles.some(ar => ar.toLowerCase().replace(/\s+/g, '') === normalizedTaskRole);
     };
 
     // Individual tasks matching user's active roles
