@@ -1907,7 +1907,7 @@ async function submitTaskTemplateForm(event) {
                     const dbObject = {
                         "Tarea": tarea,
                         "Rol": rol,
-                        
+                        "Turno": "N/A",
                         "Dias": dias,
                         "Imprescindible": imprescindible,
                         "Subtareas": subtareas
@@ -1950,7 +1950,7 @@ async function submitTaskTemplateForm(event) {
                 const dbObject = {
                     "Tarea": tarea,
                     "Rol": rol,
-                    
+                    "Turno": "N/A",
                     "Dias": dias,
                     "Imprescindible": imprescindible,
                     "Subtareas": subtareas
@@ -2040,7 +2040,7 @@ function importCsv(event) {
                         return {
                             "Tarea": t.Tarea,
                             "Rol": t.Rol,
-                            
+                            "Turno": "N/A",
                             "Dias": t.Dias,
                             "Imprescindible": t.Imprescindible || "No",
                             "Subtareas": t.Subtareas || ""
