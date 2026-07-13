@@ -782,8 +782,8 @@ function generateDailyTasks(dateStr, schedule) {
 
     // Fetch all active templates for today and current shift
     const matchingTemplates = taskTemplates.filter(t => {
-        // Shift check
-        const shiftMatch = (t.Turno === 'Ambos' || t.Turno === schedule.shift);
+        // Shift check - allow N/A since we removed the Turno column
+        const shiftMatch = (!t.Turno || t.Turno === 'Ambos' || t.Turno === 'N/A' || t.Turno === schedule.shift);
         
         // Day filter check
         let dayMatch = false;
