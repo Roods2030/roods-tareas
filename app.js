@@ -802,8 +802,8 @@ function generateDailyTasks(dateStr, schedule) {
         return shiftMatch && dayMatch;
     });
 
-    // Check if daily tasks already exist for this date and shift
-    const existing = dailyTasks.filter(d => d.date === dateStr && d.shift === schedule.shift);
+    // Check if daily tasks already exist for this date (ignoring shift since Turno is removed)
+    const existing = dailyTasks.filter(d => d.date === dateStr);
     const existingTaskNames = new Set(existing.map(d => d.task_name));
     const newInstances = [];
 
@@ -820,7 +820,7 @@ function generateDailyTasks(dateStr, schedule) {
             const instance = {
                 id: Date.now() + Math.random().toString(36).substr(2, 9),
                 date: dateStr,
-                shift: schedule.shift,
+                shift: 'Ambos', // Always Ambos since Turno is removed
                 task_name: t.Tarea,
                 role_name: t.Rol,
                 completed: false,
@@ -871,10 +871,26 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
     };
 
     // Individual tasks matching user's active roles
-    const myTasks = todayTasks.filter(t => isRoleMatch(t.role_name, activeRolesList));
+    const myTasksRaw = todayTasks.filter(t => isRoleMatch(t.role_name, activeRolesList));
+    const myTasks = [];
+    const seenMyTasks = new Set();
+    myTasksRaw.forEach(t => {
+        if (!seenMyTasks.has(t.task_name)) {
+            seenMyTasks.add(t.task_name);
+            myTasks.push(t);
+        }
+    });
     
     // Collaborative tasks
-    const collabTasks = todayTasks.filter(t => t.role_name === 'Colaborativa');
+    const collabTasksRaw = todayTasks.filter(t => t.role_name === 'Colaborativa');
+    const collabTasks = [];
+    const seenCollabTasks = new Set();
+    collabTasksRaw.forEach(t => {
+        if (!seenCollabTasks.has(t.task_name)) {
+            seenCollabTasks.add(t.task_name);
+            collabTasks.push(t);
+        }
+    });
 
     // Sort function based on original template order
     const templateOrderSort = (a, b) => {
