@@ -1317,6 +1317,12 @@ function renderAdminMonitoreo() {
     const today = new Date();
     const todayStr = formatDateString(today);
 
+    const isRoleMatchLocal = (taskRole, activeRoles) => {
+        if (taskRole.toLowerCase().trim() === 'todos') return true;
+        const normalizedTaskRole = taskRole.toLowerCase().replace(/\s+/g, '');
+        return activeRoles.some(ar => ar.toLowerCase().replace(/\s+/g, '') === normalizedTaskRole);
+    };
+
     // Tuesday Rest Day Check
     if (today.getDay() === 2) {
         grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;">☕ Hoy es Martes, día de descanso semanal. Sucursal Cerrada.</div>`;
@@ -1349,12 +1355,20 @@ function renderAdminMonitoreo() {
                 attendanceStatus = `<span>Salió (${checkOut.time})</span>`;
             }
 
-            // Calculate progress of daily tasks for this shift/role
-            const empTasks = dailyTasks.filter(d => 
-                d.date === todayStr && 
-                d.shift === sched.shift && 
-                (sched.roles.includes(d.role_name) || d.role_name === sched.roleName || d.role_name === sched.roleKey)
+            // Calculate progress of daily tasks for this role
+            const activeRoles = [...sched.roles, sched.roleName, sched.roleKey];
+            const empTasksRaw = dailyTasks.filter(d => 
+                d.date === todayStr && isRoleMatchLocal(d.role_name, activeRoles)
             );
+            
+            const empTasks = [];
+            const seenTasks = new Set();
+            empTasksRaw.forEach(t => {
+                if (!seenTasks.has(t.task_name)) {
+                    seenTasks.add(t.task_name);
+                    empTasks.push(t);
+                }
+            });
             
             const total = empTasks.length;
             const completed = empTasks.filter(t => t.completed).length;
@@ -1427,51 +1441,47 @@ function renderAdminMonitoreo() {
         });
     });
 
-    // Render collaborative shift progress dynamically for all active shifts today
-    const activeShifts = [];
-    employees.forEach(e => {
-        if (e.is_admin) return;
-        const schedules = resolveTodaySchedules(e.id, today);
-        schedules.forEach(s => {
-            if (!activeShifts.includes(s.shift)) {
-                activeShifts.push(s.shift);
-            }
-        });
+    // Render single collaborative tasks card for the whole day
+    const collabTasksRaw = dailyTasks.filter(d => d.date === todayStr && d.role_name === 'Colaborativa');
+    const collabTasks = [];
+    const seenCollabTasks = new Set();
+    collabTasksRaw.forEach(t => {
+        if (!seenCollabTasks.has(t.task_name)) {
+            seenCollabTasks.add(t.task_name);
+            collabTasks.push(t);
+        }
     });
 
-    activeShifts.forEach(shift => {
-        const collabTasks = dailyTasks.filter(d => d.date === todayStr && d.shift === shift && d.role_name === 'Colaborativa');
+    if (collabTasks.length > 0) {
         const total = collabTasks.length;
         const completed = collabTasks.filter(t => t.completed).length;
         const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
 
         let collabDetailsHtml = "";
-        if (collabTasks.length > 0) {
-            collabDetailsHtml = `<div class="monitor-tasks-list" style="margin-top: 12px; font-size: 0.8rem; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">`;
-            collabTasks.forEach(t => {
-                const statusIcon = t.completed ? "✅" : "⏳";
-                const byText = t.completed && t.completed_by_name ? ` ${t.completed_by_name.split(' ')[0]}` : "";
-                const timeText = t.completed && t.completed_at ? ` (${formatTimeString(t.completed_at)})` : "";
-                const color = t.completed ? "#9c27b0" : "#888";
-                const textDecoration = t.completed ? "line-through" : "none";
-                const deleteBtnHtml = `<span onclick="deleteActiveTask('${t.id}')" style="cursor: pointer; color: #ff5252; margin-left: 8px; font-weight: bold; font-size: 0.85rem;" title="Eliminar tarea para hoy">🗑️</span>`;
-                collabDetailsHtml += `<div style="color: ${color}; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; text-decoration: ${textDecoration};">
-                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; display: flex; align-items: center; gap: 4px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
-                    <div style="display: flex; align-items: center; text-decoration: none;">
-                        <span style="font-weight: 600; flex-shrink: 0; font-size: 0.75rem;">${byText}${timeText}</span>
-                        ${deleteBtnHtml}
-                    </div>
-                </div>`;
-            });
-            collabDetailsHtml += `</div>`;
-        }
+        collabDetailsHtml = `<div class="monitor-tasks-list" style="margin-top: 12px; font-size: 0.8rem; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">`;
+        collabTasks.forEach(t => {
+            const statusIcon = t.completed ? "✅" : "⏳";
+            const byText = t.completed && t.completed_by_name ? ` ${t.completed_by_name.split(' ')[0]}` : "";
+            const timeText = t.completed && t.completed_at ? ` (${formatTimeString(t.completed_at)})` : "";
+            const color = t.completed ? "#9c27b0" : "#888";
+            const textDecoration = t.completed ? "line-through" : "none";
+            const deleteBtnHtml = `<span onclick="deleteActiveTask('${t.id}')" style="cursor: pointer; color: #ff5252; margin-left: 8px; font-weight: bold; font-size: 0.85rem;" title="Eliminar tarea para hoy">🗑️</span>`;
+            collabDetailsHtml += `<div style="color: ${color}; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; text-decoration: ${textDecoration};">
+                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; display: flex; align-items: center; gap: 4px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
+                <div style="display: flex; align-items: center; text-decoration: none;">
+                    <span style="font-weight: 600; flex-shrink: 0; font-size: 0.75rem;">${byText}${timeText}</span>
+                    ${deleteBtnHtml}
+                </div>
+            </div>`;
+        });
+        collabDetailsHtml += `</div>`;
 
         const card = document.createElement('div');
         card.className = "monitor-card";
         card.style.borderColor = "#9c27b0";
         card.innerHTML = `
             <h4 style="color: #9c27b0;">Tareas Colaborativas</h4>
-            <p class="monitor-meta">Turno ${shift}</p>
+            <p class="monitor-meta">Todo el día</p>
             <p class="monitor-meta">Estatus: Activas hoy</p>
             <div class="progress-summary" style="margin-top: 15px;">
                 <div class="progress-text-container">
@@ -1487,12 +1497,12 @@ function renderAdminMonitoreo() {
             <!-- Quick Collab Task Form -->
             <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">
                 <div style="display: flex; gap: 6px; align-items: center;">
-                    <input type="text" id="quickTaskName-collab-${shift}" placeholder="Nueva tarea colab..." class="form-control" style="font-size:0.75rem; padding: 4px 8px; margin: 0; flex-grow: 1; height: 28px;">
-                    <button class="btn-primary" onclick="addQuickTask('collab', '${shift}', '${shift}', 'Colaborativa')" style="font-size:0.75rem; padding: 4px 10px; margin: 0; border: none; border-radius: 4px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; background: linear-gradient(135deg, #9c27b0, #e91e63); color: white; cursor: pointer;">➕</button>
+                    <input type="text" id="quickTaskName-collab-Todos" placeholder="Nueva tarea colab..." class="form-control" style="font-size:0.75rem; padding: 4px 8px; margin: 0; flex-grow: 1; height: 28px;">
+                    <button class="btn-primary" onclick="addQuickTask('collab', 'Todos', 'Todos', 'Colaborativa')" style="font-size:0.75rem; padding: 4px 10px; margin: 0; border: none; border-radius: 4px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; background: linear-gradient(135deg, #9c27b0, #e91e63); color: white; cursor: pointer;">➕</button>
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px; font-size: 0.7rem; color: var(--text-secondary);">
                     <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; margin: 0; font-weight: normal;">
-                        <input type="checkbox" id="quickTaskMandatory-collab-${shift}" style="margin: 0; transform: scale(0.9);"> ⭐ ¿Obligatoria?
+                        <input type="checkbox" id="quickTaskMandatory-collab-Todos" style="margin: 0; transform: scale(0.9);"> ⭐ ¿Obligatoria?
                     </label>
                     <span style="color: #ccc;">|</span>
                     <span style="font-style: italic; color: #888;">Sólo para hoy</span>
@@ -1500,7 +1510,7 @@ function renderAdminMonitoreo() {
             </div>
         `;
         grid.appendChild(card);
-    });
+    }
 
     if (!hasScheduled) {
         grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;">📋 No hay roles semanales programados para la semana actual. Ve a la pestaña "Roles Semanales" para asignar personal.</div>`;
