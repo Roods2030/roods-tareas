@@ -1909,11 +1909,6 @@ async function submitTaskTemplateForm(event) {
             // Cloud sync
             if (supabaseClient) {
                 try {
-                    // Update or upsert. First delete old if name/role changed, then insert new.
-                    if (oldTarea !== tarea || oldRol !== rol) {
-                        await supabaseClient.from('roods_task_templates').delete().eq('Tarea', oldTarea).eq('Rol', oldRol);
-                    }
-                    
                     const dbObject = {
                         "Tarea": tarea,
                         "Rol": rol,
@@ -1923,12 +1918,17 @@ async function submitTaskTemplateForm(event) {
                         "Subtareas": subtareas
                     };
                     
-                    // If t.id is numeric and not Date.now() timestamp, include it
+                    let error;
+                    // If t.id is numeric and from DB (not a local timestamp), update it by ID
                     if (Number.isInteger(Number(t.id)) && Number(t.id) < 1e12) {
-                        dbObject.id = Number(t.id);
+                        const res = await supabaseClient.from('roods_task_templates').update(dbObject).eq('id', t.id);
+                        error = res.error;
+                    } else {
+                        // It's a local un-synced task, insert it
+                        const res = await supabaseClient.from('roods_task_templates').insert(dbObject);
+                        error = res.error;
                     }
                     
-                    const { error } = await supabaseClient.from('roods_task_templates').upsert(dbObject);
                     if (error) throw error;
                     showNotification("💾 Tarea base actualizada con éxito.");
                 } catch (e) {
