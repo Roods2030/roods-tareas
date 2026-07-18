@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ROODS - Tareas y Turnos</title>
     <!-- Global JavaScript Error Catcher -->
     <script>
@@ -80,8 +80,6 @@
                     <div class="pin-dot" id="dot2"></div>
                     <div class="pin-dot" id="dot3"></div>
                     <div class="pin-dot" id="dot4"></div>
-                    <div class="pin-dot" id="dot5"></div>
-                    <div class="pin-dot" id="dot6"></div>
                 </div>
 
                 <div class="pin-pad">
@@ -158,6 +156,7 @@
                     <div class="tab-navigation">
                         <button class="tab-btn active" id="tabMisTareas" onclick="switchTaskTab('mis-tareas')">Mis Tareas</button>
                         <button class="tab-btn" id="tabColaborativas" onclick="switchTaskTab('colaborativas')">Tareas Turno</button>
+                        <button class="tab-btn" id="tabMensajes" onclick="switchTaskTab('mensajes')">Mensajes <span class="badge-dot hidden" id="mensajesBadgeDot"></span></button>
                         <button class="tab-btn" id="tabMuroAvisos" onclick="switchTaskTab('muro-avisos')">Muro de Avisos 💬 <span class="badge-dot hidden" id="muroBadgeDot"></span></button>
                     </div>
 
@@ -170,6 +169,13 @@
                     <div class="tab-content" id="contentColaborativas">
                         <div class="task-list" id="collabTasksList">
                             <!-- Populated by JS -->
+                        </div>
+                    </div>
+                    
+                    <!-- Mensajes Privados List -->
+                    <div class="tab-content" id="contentMensajes">
+                        <div class="task-list" id="myMessagesList">
+                            <div class="empty-state">No tienes mensajes nuevos.</div>
                         </div>
                     </div>
                     <div class="tab-content" id="contentMuroAvisos">
@@ -208,11 +214,13 @@
                 <!-- Admin Tab Navigation -->
                 <div class="tab-navigation admin-nav">
                     <button class="tab-btn active" id="tabMonitoreo" onclick="switchAdminTab('monitoreo')">Monitoreo</button>
+                    <button class="tab-btn" id="tabHistorial" onclick="switchAdminTab('historial')">Historial 📆</button>
                     <button class="tab-btn" id="tabAsistencia" onclick="switchAdminTab('asistencia')">Asistencia</button>
                     <button class="tab-btn" id="tabRoles" onclick="switchAdminTab('roles')">Roles Semanales</button>
                     <button class="tab-btn" id="tabSwaps" onclick="switchAdminTab('swaps')">Cambios <span class="badge hidden" id="swapsBadge">0</span></button>
                     <button class="tab-btn" id="tabTareasCsv" onclick="switchAdminTab('tareas-csv')">Tareas CSV</button>
                     <button class="tab-btn" id="tabEmpleados" onclick="switchAdminTab('empleados')">Empleados</button>
+                    <button class="tab-btn" id="tabComunicados" onclick="switchAdminTab('comunicados')">Comunicados 📢</button>
                     <button class="tab-btn" id="tabMuroAvisosAdmin" onclick="switchAdminTab('muro-avisos-admin')">Muro de Avisos 💬 <span class="badge-dot hidden" id="adminMuroBadgeDot"></span></button>
                 </div>
 
@@ -226,44 +234,104 @@
                             </div>
                         </div>
                         
-                        <!-- WIDGET: ENVIAR TAREA DE URGENCIA -->
+                        <!-- WIDGET: TAREAS DE MAÑANA -->
                         <div class="card glass" style="padding: 20px; border-radius: var(--border-radius-medium); border: 1px solid rgba(255,255,255,0.2); background: rgba(255, 255, 255, 0.45);">
-                            <h4 style="margin-bottom: 5px; color: #d81b60; display: flex; align-items: center; gap: 8px; font-size: 1.1rem; font-weight: 800;">
-                                <span>🚨</span> Enviar Tarea de Urgencia
+                            <h4 style="margin-bottom: 5px; color: #1976d2; display: flex; align-items: center; gap: 8px; font-size: 1.1rem; font-weight: 800;">
+                                <span>📅</span> Tareas para Mañana
                             </h4>
-                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Se notificará instantáneamente a los empleados activos en pantalla.</p>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Programa tareas espontáneas que aparecerán mañana.</p>
                             
-                            <form id="urgentTaskForm" onsubmit="sendUrgentTask(event)">
+                            <form id="tomorrowTaskForm" onsubmit="sendTomorrowTask(event)">
                                 <div class="form-group" style="margin-bottom: 12px;">
-                                    <label for="urgentTaskText" style="font-size: 0.75rem; font-weight:700;">Mensaje / Tarea:</label>
-                                    <input type="text" id="urgentTaskText" required class="form-control" placeholder="Ej. Mover mesas por la lluvia" style="padding: 8px 12px; font-size: 0.9rem;">
+                                    <label for="tomorrowTaskText" style="font-size: 0.75rem; font-weight:700;">Tarea:</label>
+                                    <input type="text" id="tomorrowTaskText" required class="form-control" placeholder="Ej. Recibir pedido de leche" style="padding: 8px 12px; font-size: 0.9rem;">
                                 </div>
                                 <div class="form-group" style="margin-bottom: 12px;">
-                                    <label for="urgentTaskTarget" style="font-size: 0.75rem; font-weight:700;">Destinatario:</label>
-                                    <select id="urgentTaskTarget" class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
-                                        <option value="Todos">Todos los activos</option>
+                                    <label for="tomorrowTaskTarget" style="font-size: 0.75rem; font-weight:700;">Destinatario:</label>
+                                    <select id="tomorrowTaskTarget" class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
+                                        <option value="Todos">Colaborativa (Todos)</option>
                                         <option value="Cajero - Barista">Rol: Cajero - Barista</option>
                                         <option value="Cocina - Barista">Rol: Cocina - Barista</option>
                                         <option value="Cajero">Rol: Cajero</option>
                                         <option value="Barista">Rol: Barista</option>
                                         <option value="Cocina">Rol: Cocina</option>
-                                        <option value="Aux. Administrativo">Rol: Aux. Administrativo</option>
-                                        <option value="Apoyo Cocina">Rol: Apoyo Cocina</option>
-                                        <option value="Apoyo General">Rol: Apoyo General</option>
-                                        <option value="Cajera">Rol: Cajera (Anterior)</option>
-                                        <option value="Apoyo">Rol: Apoyo (Anterior)</option>
                                     </select>
                                 </div>
                                 <div class="form-group" style="margin-bottom: 15px;">
-                                    <label for="urgentTaskShift" style="font-size: 0.75rem; font-weight:700;">Turno:</label>
-                                    <select id="urgentTaskShift" class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
+                                    <label for="tomorrowTaskShift" style="font-size: 0.75rem; font-weight:700;">Turno:</label>
+                                    <select id="tomorrowTaskShift" class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
                                         <option value="Ambos">Ambos / Todos</option>
-                                        <option value="Matutino">Turno Matutino</option>
-                                        <option value="Vespertino">Turno Vespertino</option>
-                                        <option value="Mixto">Turno Mixto</option>
+                                        <option value="Matutino">Matutino</option>
+                                        <option value="Vespertino">Vespertino</option>
                                     </select>
                                 </div>
-                                <button type="submit" class="btn-submit" style="margin-top: 0; padding: 10px; font-size: 0.9rem;">Enviar Tarea ⚡</button>
+                                <button type="submit" class="btn-submit" style="margin-top: 0; padding: 10px; font-size: 0.9rem; background: #1976d2;">Agregar Tarea 📆</button>
+                            </form>
+                            
+                            <div id="tomorrowTasksList" style="margin-top: 15px; border-top: 1px dashed rgba(0,0,0,0.1); padding-top: 10px; font-size: 0.8rem;">
+                                <!-- Rendered via JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- ADMIN TAB CONTENT: HISTORIAL -->
+                <div class="tab-content admin-content" id="adminContentHistorial">
+                    <h3>Historial Operativo de Tareas</h3>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Selecciona una fecha anterior para revisar qué tareas se completaron y cuáles no.</p>
+                    
+                    <div class="form-group" style="max-width: 300px; margin-bottom: 20px;">
+                        <label for="historialDate">Fecha:</label>
+                        <input type="date" id="historialDate" class="form-control" onchange="renderHistorialTasks()">
+                    </div>
+                    
+                    <div class="monitoreo-grid" id="historialGrid">
+                        <div class="empty-state" style="grid-column: 1/-1;">Selecciona una fecha para ver el historial.</div>
+                    </div>
+                </div>
+
+                <!-- ADMIN TAB CONTENT: COMUNICADOS -->
+                <div class="tab-content admin-content" id="adminContentComunicados">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
+                        <!-- Anuncios Globales -->
+                        <div class="card glass" style="padding: 20px;">
+                            <h3 style="color: #ff9800; margin-bottom: 5px;">Anuncio Global (Globo) 🎈</h3>
+                            <p style="font-size: 0.8rem; color: #666; margin-bottom: 15px;">Envía un mensaje emergente que saltará en la pantalla de todos los colaboradores activos.</p>
+                            
+                            <form id="globalAnnounceForm" onsubmit="sendGlobalAnnouncement(event)">
+                                <div class="form-group" style="margin-bottom: 12px;">
+                                    <label for="globalAnnounceText" style="font-size: 0.8rem; font-weight:700;">Mensaje:</label>
+                                    <textarea id="globalAnnounceText" required class="form-control" rows="3" placeholder="¡Excelente turno a todos!" style="padding: 8px 12px; font-size: 0.9rem; resize: vertical;"></textarea>
+                                </div>
+                                <button type="submit" class="btn-submit" style="margin-top: 5px; padding: 10px; background: linear-gradient(135deg, #ff9800, #f44336);">Enviar Globo a Todos 🎈</button>
+                            </form>
+                            
+                            <div id="recentAnnouncementsList" style="margin-top: 15px; border-top: 1px dashed rgba(0,0,0,0.1); padding-top: 10px; font-size: 0.8rem; max-height: 150px; overflow-y: auto;">
+                                <!-- JS -->
+                            </div>
+                        </div>
+                        
+                        <!-- Mensajes Privados -->
+                        <div class="card glass" style="padding: 20px;">
+                            <h3 style="color: #1976d2; margin-bottom: 5px;">Mensaje Privado Directo ✉️</h3>
+                            <p style="font-size: 0.8rem; color: #666; margin-bottom: 15px;">Envía un mensaje específico a un empleado (con opción de foto).</p>
+                            
+                            <form id="privateMessageForm" onsubmit="sendPrivateMessage(event)">
+                                <div class="form-group" style="margin-bottom: 12px;">
+                                    <label for="privateMessageRecipient" style="font-size: 0.8rem; font-weight:700;">Destinatario:</label>
+                                    <select id="privateMessageRecipient" required class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
+                                        <!-- JS -->
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 12px;">
+                                    <label for="privateMessageText" style="font-size: 0.8rem; font-weight:700;">Mensaje:</label>
+                                    <textarea id="privateMessageText" required class="form-control" rows="3" placeholder="Por favor revisa el inventario..." style="padding: 8px 12px; font-size: 0.9rem; resize: vertical;"></textarea>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 12px;">
+                                    <label for="privateMessagePhoto" style="font-size: 0.8rem; font-weight:700;">Foto Adjunta (Opcional):</label>
+                                    <input type="file" id="privateMessagePhoto" accept="image/*" class="form-control" style="font-size: 0.8rem; background: white;">
+                                </div>
+                                <button type="submit" class="btn-submit" style="margin-top: 5px; padding: 10px; background: #1976d2;">Enviar Mensaje ✉️</button>
                             </form>
                         </div>
                     </div>
@@ -575,30 +643,27 @@
         </div>
     </div>
 
-    <!-- URGENT ALERT POPUP -->
-    <div id="urgentAlertModal" class="modal hidden" style="z-index: 3000; background: rgba(0,0,0,0.65);">
-        <div class="modal-content card glass" style="max-width: 400px; border: 3px solid #f44336; text-align: center; padding: 30px; animation: pulseBorder 1.5s infinite;">
-            <div style="font-size: 3.5rem; margin-bottom: 15px; animation: bounce 1s infinite;">🚨</div>
-            <h3 style="color: #f44336; font-weight: 800; font-size: 1.4rem; margin-bottom: 10px;">¡TAREA DE URGENCIA!</h3>
-            <p style="font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 20px;">Tu supervisor ha enviado una tarea prioritaria:</p>
-            <div id="urgentAlertTaskText" style="font-size: 1.2rem; font-weight: 700; background: #ffebee; border-left: 5px solid #f44336; padding: 15px; border-radius: var(--border-radius-small); margin-bottom: 25px; color: #b71c1c;">
-                Mover mesas por lluvia
-            </div>
-            <button class="btn-primary" onclick="acknowledgeUrgentAlert()" style="width: 100%; justify-content: center; background: linear-gradient(135deg, #f44336, #d32f2f); box-shadow: 0 8px 20px rgba(244, 67, 54, 0.3); color: white; border: none;">
-                Entendido, lo haré ahora mismo 👍
-            </button>
-        </div>
-    </div>
+    <!-- URGENT ALERT POPUP (Removido) -->
 
     <div id="notification" class="notification">
         <span id="notificationText">Notificación de prueba</span>
         <button id="notificationClose" class="notification-close-btn" onclick="hideNotification()">✖</button>
     </div>
 
+    <!-- Global Announcement Modal -->
+    <div id="globalAnnounceModal" class="modal hidden" style="z-index: 10000; align-items: center; justify-content: center; background: rgba(0,0,0,0.85);">
+        <div class="modal-content glass" style="max-width: 400px; text-align: center; border: 2px solid #ff9800; background: rgba(255, 255, 255, 0.95); animation: pulse 1.5s infinite alternate;">
+            <div style="font-size: 3rem; margin-bottom: 10px;">🎈</div>
+            <h2 style="color: #ff9800; font-size: 1.5rem; margin-bottom: 15px;">¡Aviso Nuevo!</h2>
+            <p id="globalAnnounceTextDisplay" style="font-size: 1.1rem; color: #333; margin-bottom: 25px; line-height: 1.5;"></p>
+            <button class="btn-primary" onclick="acknowledgeGlobalAnnounce()" style="width: 100%; font-size: 1rem; padding: 12px; background: linear-gradient(135deg, #ff9800, #f44336); border: none; color: white; cursor: pointer; border-radius: 8px; font-weight: bold;">Entendido ✅</button>
+        </div>
+    </div>
+
     <!-- Supabase SDK (loaded locally to prevent CDN/blockage issues) -->
     <script src="supabase.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.0.20"></script>
+    <script src="app.js?v=1.0.21"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {

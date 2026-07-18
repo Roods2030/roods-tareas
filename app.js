@@ -374,7 +374,7 @@ function hideNotification() {
 
 // --- PIN Numeric Pad Logic ---
 function pressPin(num) {
-    if (currentPIN.length < 6) {
+    if (currentPIN.length < 4) {
         currentPIN += num;
         updatePinDisplay();
     }
@@ -383,7 +383,7 @@ function pressPin(num) {
     const matched = employees.find(e => e.pin === currentPIN);
     if (matched) {
         setTimeout(login, 200);
-    } else if (currentPIN.length === 6) {
+    } else if (currentPIN.length === 4) {
         // If they entered 6 digits and no match was found, trigger login to show error
         setTimeout(login, 200);
     }
@@ -400,7 +400,7 @@ function backspacePin() {
 }
 
 function updatePinDisplay() {
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= 4; i++) {
         const dot = document.getElementById(`dot${i}`);
         if (dot) {
             if (i <= currentPIN.length) {
@@ -505,7 +505,7 @@ function initEmployeeView() {
 
     // Attendance State Check
     updateAttendanceUI(today, schedules);
-    checkForUrgentTasks();
+
 
     // Muro de mensajes load
     loadMuroMessages();
@@ -738,8 +738,8 @@ function performCheckOut(roleKey) {
     // Check for pending mandatory tasks
     const empTasks = dailyTasks.filter(d => 
         d.date === todayStr && 
-        d.shift === roleInfo.shift && 
-        (roleInfo.taskRoles.includes(d.role_name) || d.role_name === roleInfo.name || d.role_name === roleInfo.key)
+        (d.shift === roleInfo.shift || d.shift === 'Ambos') && 
+        (roleInfo.taskRoles.includes(d.role_name) || d.role_name === roleInfo.name || d.role_name === roleInfo.key || d.role_name === 'Colaborativa')
     );
     const pendingMandatory = empTasks.filter(t => t.Imprescindible === 'Si' && !t.completed);
     if (pendingMandatory.length > 0) {
@@ -975,9 +975,7 @@ function createTaskItemElement(task, isCollab) {
         ? ` (${completedCount}/${task.subtasks_state.length})`
         : "";
 
-    const urgentBadge = task.is_urgent 
-        ? `<span class="badge" style="background: linear-gradient(135deg, #f44336, #d32f2f); color: white; font-size: 0.7rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle; animation: bounce 1s infinite; display: inline-block;">URGENTE 🚨</span>`
-        : "";
+
 
     item.innerHTML = `
         <div class="task-main-row" style="display: flex; align-items: center; width: 100%;">
@@ -985,7 +983,7 @@ function createTaskItemElement(task, isCollab) {
                 <span class="check-icon">✓</span>
             </div>
             <div class="task-text-container" style="flex-grow: 1; padding: 4px 0;">
-                <span class="task-name" style="${task.is_urgent ? 'color: #d32f2f; font-weight: 700;' : ''}">${task.task_name}${subtaskSummary}${urgentBadge}</span>
+                <span class="task-name">${task.task_name}${subtaskSummary}</span>
                 <span class="task-meta ${task.completed ? 'completed-by' : ''}">${metaText}</span>
             </div>
             ${hasSubtasks ? '<span class="chevron-icon" style="margin-left: 8px; font-weight: bold; cursor: pointer; transition: transform 0.2s; padding: 4px;">▼</span>' : ''}
@@ -1160,10 +1158,12 @@ function switchTaskTab(tabId) {
     currentTaskTab = tabId;
     document.getElementById('tabMisTareas').className = `tab-btn ${tabId === 'mis-tareas' ? 'active' : ''}`;
     document.getElementById('tabColaborativas').className = `tab-btn ${tabId === 'colaborativas' ? 'active' : ''}`;
+    document.getElementById('tabMensajes').className = `tab-btn ${tabId === 'mensajes' ? 'active' : ''}`;
     document.getElementById('tabMuroAvisos').className = `tab-btn ${tabId === 'muro-avisos' ? 'active' : ''}`;
 
     document.getElementById('contentMisTareas').className = `tab-content ${tabId === 'mis-tareas' ? 'active' : ''}`;
     document.getElementById('contentColaborativas').className = `tab-content ${tabId === 'colaborativas' ? 'active' : ''}`;
+    document.getElementById('contentMensajes').className = `tab-content ${tabId === 'mensajes' ? 'active' : ''}`;
     document.getElementById('contentMuroAvisos').className = `tab-content ${tabId === 'muro-avisos' ? 'active' : ''}`;
 
     if (tabId === 'muro-avisos') {
@@ -1175,7 +1175,120 @@ function switchTaskTab(tabId) {
         localStorage.setItem('roods_last_read_muro', lastReadMuroTimestamp);
         updateMuroBadge();
     }
+    
+    if (tabId === 'mensajes') {
+        markPrivateMessagesAsRead();
+    }
 }
+
+// --- EMPLOYEE MESSAGING LOGIC ---
+let hasShownGlobalAnnounce = false;
+
+async function pollEmployeeMessages() {
+    if (!currentUser || currentUser.is_admin) return;
+    
+    // 1. Check Global Announcements
+    if (supabaseClient && !hasShownGlobalAnnounce) {
+        try {
+            const lastLoginStr = localStorage.getItem('roods_last_login_time') || new Date(Date.now() - 24*60*60*1000).toISOString();
+            const { data } = await supabaseClient
+                .from('roods_announcements')
+                .select('*')
+                .gt('created_at', lastLoginStr)
+                .order('created_at', { ascending: false })
+                .limit(1);
+                
+            if (data && data.length > 0) {
+                const announce = data[0];
+                const seenStr = localStorage.getItem('roods_seen_announcements') || '[]';
+                const seenArr = JSON.parse(seenStr);
+                
+                if (!seenArr.includes(announce.id)) {
+                    document.getElementById('globalAnnounceTextDisplay').textContent = announce.message;
+                    document.getElementById('globalAnnounceModal').classList.remove('hidden');
+                    
+                    // Mark as seen immediately so it doesn't loop if user clicks away
+                    seenArr.push(announce.id);
+                    localStorage.setItem('roods_seen_announcements', JSON.stringify(seenArr));
+                    hasShownGlobalAnnounce = true;
+                }
+            }
+        } catch (e) {
+            console.error("Error polling announcements", e);
+        }
+    }
+    
+    // 2. Check Private Messages
+    if (supabaseClient) {
+        try {
+            const { data } = await supabaseClient
+                .from('roods_private_messages')
+                .select('*')
+                .eq('recipient_id', currentUser.id)
+                .order('created_at', { ascending: false });
+                
+            if (data) {
+                renderPrivateMessages(data);
+                
+                const unreadCount = data.filter(m => !m.read).length;
+                const badge = document.getElementById('mensajesBadgeDot');
+                if (badge) {
+                    if (unreadCount > 0 && currentTaskTab !== 'mensajes') {
+                        badge.classList.remove('hidden');
+                    } else {
+                        badge.classList.add('hidden');
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Error polling private messages", e);
+        }
+    }
+}
+
+function renderPrivateMessages(messages) {
+    const list = document.getElementById('myMessagesList');
+    if (!list) return;
+    
+    if (messages.length === 0) {
+        list.innerHTML = '<div class="empty-state">No tienes mensajes.</div>';
+        return;
+    }
+    
+    let html = '';
+    messages.forEach(m => {
+        const bg = m.read ? 'rgba(255,255,255,0.4)' : 'rgba(25, 118, 210, 0.1)';
+        const border = m.read ? '1px solid #ddd' : '1px solid #1976d2';
+        html += `<div style="background: ${bg}; border: ${border}; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                <strong style="color: #1976d2;">De: ${m.sender_name}</strong>
+                <span style="font-size: 0.75rem; color: #888;">${formatTimeString(m.created_at)}</span>
+            </div>
+            <div style="font-size: 0.9rem; color: #333; line-height: 1.4;">${m.message}</div>
+        </div>`;
+    });
+    list.innerHTML = html;
+}
+
+async function markPrivateMessagesAsRead() {
+    if (!currentUser || currentUser.is_admin || !supabaseClient) return;
+    document.getElementById('mensajesBadgeDot').classList.add('hidden');
+    
+    try {
+        await supabaseClient
+            .from('roods_private_messages')
+            .update({ read: true })
+            .eq('recipient_id', currentUser.id)
+            .eq('read', false);
+    } catch(e) {
+        console.error("Failed to mark messages as read");
+    }
+}
+
+function acknowledgeGlobalAnnounce() {
+    document.getElementById('globalAnnounceModal').classList.add('hidden');
+}
+
 
 // --- SHIFT SWAP MODAL LOGIC ---
 function openSwapModal() {
@@ -1276,6 +1389,8 @@ function switchAdminTab(tabId) {
 
     // Run tab-specific loading logic
     if (tabId === 'monitoreo') renderAdminMonitoreo();
+    if (tabId === 'historial') renderHistorialTasks();
+    if (tabId === 'comunicados') renderAdminComunicados();
     if (tabId === 'asistencia') renderAdminAttendance();
     if (tabId === 'roles') renderAdminWeeklyRoles();
     if (tabId === 'swaps') renderAdminSwaps();
@@ -1383,13 +1498,33 @@ function renderAdminMonitoreo() {
                     const color = t.completed ? "#388E3C" : "#888";
                     const textDecoration = t.completed ? "line-through" : "none";
                     const deleteBtnHtml = `<span onclick="deleteActiveTask('${t.id}')" style="cursor: pointer; color: #ff5252; margin-left: 8px; font-weight: bold; font-size: 0.85rem;" title="Eliminar tarea para hoy">🗑️</span>`;
-                    tasksDetailsHtml += `<div style="color: ${color}; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; text-decoration: ${textDecoration};">
-                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; display: flex; align-items: center; gap: 4px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
-                        <div style="display: flex; align-items: center; text-decoration: none;">
-                            <span style="font-weight: 600; flex-shrink: 0;">${timeText}</span>
-                            ${deleteBtnHtml}
-                        </div>
-                    </div>`;
+                    const hasSubtasks = t.subtasks_state && t.subtasks_state.length > 0;
+                    const completedCount = hasSubtasks ? t.subtasks_state.filter(s => s.completed).length : 0;
+                    const subtaskSummary = hasSubtasks ? ` <span style="font-size: 0.7rem; color: #777;">(${completedCount}/${t.subtasks_state.length})</span>` : "";
+                    
+                    let subtasksHtml = "";
+                    if (hasSubtasks) {
+                        subtasksHtml = `<div id="subtasks-${t.id}" style="display: none; padding-left: 20px; font-size: 0.75rem; margin-top: 4px; color: #555;">`;
+                        t.subtasks_state.forEach(st => {
+                            const stIcon = st.completed ? "☑️" : "☐";
+                            subtasksHtml += `<div style="margin-bottom: 2px;">${stIcon} ${st.name}</div>`;
+                        });
+                        subtasksHtml += `</div>`;
+                    }
+                    
+                    const toggleAttr = hasSubtasks ? `onclick="const el = document.getElementById('subtasks-${t.id}'); el.style.display = el.style.display === 'none' ? 'block' : 'none';" style="cursor: pointer;" title="Haz clic para ver subtareas"` : "";
+
+                    tasksDetailsHtml += `
+                        <div style="margin-bottom: 6px;">
+                            <div style="color: ${color}; display: flex; justify-content: space-between; align-items: center; text-decoration: ${textDecoration};" ${toggleAttr}>
+                                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; display: flex; align-items: center; gap: 4px;">${statusIcon} ${t.task_name}${subtaskSummary} ${hasSubtasks ? '▾' : ''}</span>
+                                <div style="display: flex; align-items: center; text-decoration: none;" onclick="event.stopPropagation()">
+                                    <span style="font-weight: 600; flex-shrink: 0;">${timeText}</span>
+                                    ${deleteBtnHtml}
+                                </div>
+                            </div>
+                            ${subtasksHtml}
+                        </div>`;
                 });
                 tasksDetailsHtml += `</div>`;
             }
@@ -1466,12 +1601,32 @@ function renderAdminMonitoreo() {
             const color = t.completed ? "#9c27b0" : "#888";
             const textDecoration = t.completed ? "line-through" : "none";
             const deleteBtnHtml = `<span onclick="deleteActiveTask('${t.id}')" style="cursor: pointer; color: #ff5252; margin-left: 8px; font-weight: bold; font-size: 0.85rem;" title="Eliminar tarea para hoy">🗑️</span>`;
-            collabDetailsHtml += `<div style="color: ${color}; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; text-decoration: ${textDecoration};">
-                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; display: flex; align-items: center; gap: 4px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
-                <div style="display: flex; align-items: center; text-decoration: none;">
-                    <span style="font-weight: 600; flex-shrink: 0; font-size: 0.75rem;">${byText}${timeText}</span>
-                    ${deleteBtnHtml}
+            const hasSubtasks = t.subtasks_state && t.subtasks_state.length > 0;
+            const completedCount = hasSubtasks ? t.subtasks_state.filter(s => s.completed).length : 0;
+            const subtaskSummary = hasSubtasks ? ` <span style="font-size: 0.7rem; color: #777;">(${completedCount}/${t.subtasks_state.length})</span>` : "";
+            
+            let subtasksHtml = "";
+            if (hasSubtasks) {
+                subtasksHtml = `<div id="subtasks-collab-${t.id}" style="display: none; padding-left: 20px; font-size: 0.75rem; margin-top: 4px; color: #555;">`;
+                t.subtasks_state.forEach(st => {
+                    const stIcon = st.completed ? "☑️" : "☐";
+                    subtasksHtml += `<div style="margin-bottom: 2px;">${stIcon} ${st.name}</div>`;
+                });
+                subtasksHtml += `</div>`;
+            }
+            
+            const toggleAttr = hasSubtasks ? `onclick="const el = document.getElementById('subtasks-collab-${t.id}'); el.style.display = el.style.display === 'none' ? 'block' : 'none';" style="cursor: pointer;" title="Haz clic para ver subtareas"` : "";
+
+            collabDetailsHtml += `
+            <div style="margin-bottom: 6px;">
+                <div style="color: ${color}; display: flex; justify-content: space-between; align-items: center; text-decoration: ${textDecoration};" ${toggleAttr}>
+                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; display: flex; align-items: center; gap: 4px;">${statusIcon} ${t.task_name}${subtaskSummary} ${hasSubtasks ? '▾' : ''}</span>
+                    <div style="display: flex; align-items: center; text-decoration: none;" onclick="event.stopPropagation()">
+                        <span style="font-weight: 600; flex-shrink: 0; font-size: 0.75rem;">${byText}${timeText}</span>
+                        ${deleteBtnHtml}
+                    </div>
                 </div>
+                ${subtasksHtml}
             </div>`;
         });
         collabDetailsHtml += `</div>`;
@@ -1515,12 +1670,301 @@ function renderAdminMonitoreo() {
     if (!hasScheduled) {
         grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;">📋 No hay roles semanales programados para la semana actual. Ve a la pestaña "Roles Semanales" para asignar personal.</div>`;
     }
+    
+    renderTomorrowTasks();
+}
+
+// --- TOMORROW TASKS LOGIC ---
+async function sendTomorrowTask(event) {
+    event.preventDefault();
+    const taskText = document.getElementById('tomorrowTaskText').value.trim();
+    const targetRole = document.getElementById('tomorrowTaskTarget').value;
+    const targetShift = document.getElementById('tomorrowTaskShift').value;
+    
+    if (!taskText) return;
+    
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = formatDateString(tomorrow);
+    
+    const newTomorrowTask = {
+        id: Date.now() + Math.random().toString().slice(2, 6),
+        date: tomorrowStr,
+        shift: targetShift,
+        role_name: targetRole === 'Todos' ? 'Colaborativa' : targetRole,
+        task_name: taskText,
+        completed: false,
+        is_collaborative: targetRole === 'Todos',
+        subtasks_state: [],
+        Imprescindible: 'No',
+        is_urgent: false,
+        urgent_acknowledged: false
+    };
+    
+    dailyTasks.push(newTomorrowTask);
+    saveLocalDatabase();
+    
+    document.getElementById('tomorrowTaskText').value = "";
+    showNotification("📆 Tarea programada para mañana con éxito.");
+    
+    if (supabaseClient) {
+        try {
+            const { error } = await supabaseClient.from('roods_daily_tasks').insert(newTomorrowTask);
+            if (error) throw error;
+        } catch (e) {
+            console.error("Failed to insert tomorrow task:", e);
+        }
+    }
+    
+    renderTomorrowTasks();
+}
+
+function renderTomorrowTasks() {
+    const list = document.getElementById('tomorrowTasksList');
+    if (!list) return;
+    
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = formatDateString(tomorrow);
+    
+    const tomorrowTasks = dailyTasks.filter(t => t.date === tomorrowStr);
+    
+    if (tomorrowTasks.length === 0) {
+        list.innerHTML = `<span style="color: #888;">No hay tareas programadas para mañana todavía.</span>`;
+        return;
+    }
+    
+    let html = "";
+    tomorrowTasks.forEach(t => {
+        const deleteBtnHtml = `<span onclick="deleteActiveTask('${t.id}')" style="cursor: pointer; color: #ff5252; margin-left: 8px; font-weight: bold; font-size: 0.85rem;" title="Eliminar tarea">🗑️</span>`;
+        html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <span><strong style="color: #1976d2;">[${t.shift} | ${t.role_name}]</strong> ${t.task_name}</span>
+            ${deleteBtnHtml}
+        </div>`;
+    });
+    list.innerHTML = html;
+}
+
+
+// --- ADMIN TAB: HISTORIAL ---
+async function renderHistorialTasks() {
+    const dateInput = document.getElementById('historialDate');
+    const grid = document.getElementById('historialGrid');
+    if (!dateInput || !grid) return;
+    
+    if (!dateInput.value) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        // Format to YYYY-MM-DD for input type="date"
+        const yyyy = yesterday.getFullYear();
+        const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
+        const dd = String(yesterday.getDate()).padStart(2, '0');
+        dateInput.value = `${yyyy}-${mm}-${dd}`;
+    }
+    
+    // Convert YYYY-MM-DD from input to DD/MM/YYYY for DB match
+    const parts = dateInput.value.split('-');
+    if (parts.length !== 3) return;
+    const targetDateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
+    
+    grid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;">Cargando historial de la base de datos... ⏳</div>';
+    
+    if (!supabaseClient) {
+        grid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1; color: red;">Error: No hay conexión con la base de datos.</div>';
+        return;
+    }
+    
+    try {
+        const { data, error } = await supabaseClient
+            .from('roods_daily_tasks')
+            .select('*')
+            .eq('date', targetDateStr);
+            
+        if (error) throw error;
+        
+        if (!data || data.length === 0) {
+            grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;">No se encontraron tareas registradas para la fecha ${targetDateStr}.</div>`;
+            return;
+        }
+        
+        // Group by role
+        const roleGroups = {};
+        data.forEach(task => {
+            if (!roleGroups[task.role_name]) {
+                roleGroups[task.role_name] = [];
+            }
+            roleGroups[task.role_name].push(task);
+        });
+        
+        grid.innerHTML = "";
+        
+        Object.keys(roleGroups).forEach(role => {
+            const roleTasks = roleGroups[role];
+            
+            // Deduplicate by task name just in case
+            const uniqueTasks = [];
+            const seen = new Set();
+            roleTasks.forEach(t => {
+                if (!seen.has(t.task_name)) {
+                    seen.add(t.task_name);
+                    uniqueTasks.push(t);
+                }
+            });
+            
+            const total = uniqueTasks.length;
+            const completed = uniqueTasks.filter(t => t.completed).length;
+            const percent = total > 0 ? Math.round((completed/total)*100) : 100;
+            
+            let html = `<div class="monitor-tasks-list" style="margin-top: 12px; font-size: 0.8rem; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">`;
+            
+            uniqueTasks.forEach(t => {
+                const statusIcon = t.completed ? "✅" : "❌";
+                const color = t.completed ? "#388E3C" : "#d32f2f";
+                const byText = t.completed && t.completed_by_name ? ` (Por: ${t.completed_by_name.split(' ')[0]})` : "";
+                const timeText = t.completed && t.completed_at ? ` [${formatTimeString(t.completed_at)}]` : "";
+                
+                html += `<div style="color: ${color}; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
+                    <span style="font-weight: 600; flex-shrink: 0; font-size: 0.7rem;">${timeText}${byText}</span>
+                </div>`;
+            });
+            html += `</div>`;
+            
+            const card = document.createElement('div');
+            card.className = "monitor-card";
+            card.innerHTML = `
+                <h4 style="margin: 0; margin-bottom: 5px;">${role}</h4>
+                <div class="progress-summary" style="margin-top: 10px;">
+                    <div class="progress-text-container">
+                        <span>Completadas (${completed}/${total})</span>
+                        <span>${percent}%</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" style="width: ${percent}%; background: ${percent === 100 ? '#4CAF50' : (percent > 50 ? '#FF9800' : '#F44336')};"></div>
+                    </div>
+                </div>
+                ${html}
+            `;
+            grid.appendChild(card);
+        });
+        
+    } catch(e) {
+        console.error("Error loading historial:", e);
+        grid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1; color: red;">Error al cargar el historial. Intenta nuevamente.</div>';
+    }
+}
+
+// --- ADMIN TAB: COMUNICADOS ---
+function renderAdminComunicados() {
+    const select = document.getElementById('privateMessageRecipient');
+    if (select) {
+        let html = '<option value="">-- Selecciona Colaborador --</option>';
+        employees.filter(e => !e.is_admin).forEach(emp => {
+            html += `<option value="${emp.id}">${emp.nickname || emp.name}</option>`;
+        });
+        select.innerHTML = html;
+    }
+    loadRecentAnnouncements();
+}
+
+async function loadRecentAnnouncements() {
+    const list = document.getElementById('recentAnnouncementsList');
+    if (!list) return;
+    
+    if (!supabaseClient) {
+        list.innerHTML = '<span style="color:red;">Sin conexión a DB</span>';
+        return;
+    }
+    
+    try {
+        const { data, error } = await supabaseClient
+            .from('roods_announcements')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(5);
+            
+        if (error) throw error;
+        
+        if (!data || data.length === 0) {
+            list.innerHTML = '<span style="color:#888;">No hay anuncios recientes.</span>';
+            return;
+        }
+        
+        let html = '';
+        data.forEach(a => {
+            html += `<div style="margin-bottom: 8px;">
+                <strong>${formatTimeString(a.created_at)}</strong> - ${a.message}
+            </div>`;
+        });
+        list.innerHTML = html;
+    } catch(e) {
+        console.error(e);
+        list.innerHTML = '<span style="color:red;">Error al cargar.</span>';
+    }
+}
+
+async function sendGlobalAnnouncement(event) {
+    event.preventDefault();
+    const text = document.getElementById('globalAnnounceText').value.trim();
+    if (!text) return;
+    
+    const obj = {
+        message: text,
+        created_by_name: currentUser.name
+    };
+    
+    if (supabaseClient) {
+        try {
+            const { error } = await supabaseClient.from('roods_announcements').insert(obj);
+            if (error) throw error;
+            showNotification("🎈 Globo global enviado a todos!");
+            document.getElementById('globalAnnounceText').value = "";
+            loadRecentAnnouncements();
+        } catch(e) {
+            console.error(e);
+            showNotification("Error enviando anuncio.");
+        }
+    }
+}
+
+async function sendPrivateMessage(event) {
+    event.preventDefault();
+    const recipientId = document.getElementById('privateMessageRecipient').value;
+    const text = document.getElementById('privateMessageText').value.trim();
+    
+    if (!recipientId || !text) {
+        alert("Selecciona un destinatario y escribe un mensaje.");
+        return;
+    }
+    
+    const obj = {
+        sender_name: currentUser.name,
+        recipient_id: recipientId,
+        message: text,
+        read: false
+    };
+    
+    // Optional photo upload logic could go here if implemented with Storage.
+    // For now, we just insert the message.
+    
+    if (supabaseClient) {
+        try {
+            const { error } = await supabaseClient.from('roods_private_messages').insert(obj);
+            if (error) throw error;
+            showNotification("✉️ Mensaje privado enviado exitosamente.");
+            document.getElementById('privateMessageText').value = "";
+            document.getElementById('privateMessageRecipient').value = "";
+        } catch(e) {
+            console.error(e);
+            showNotification("Error enviando mensaje.");
+        }
+    }
 }
 
 // --- ADMIN TAB: ASISTENCIA ---
 function renderAdminAttendance() {
     const tbody = document.getElementById('attendanceTableBody');
-    if (!tbody) return;
     tbody.innerHTML = "";
 
     const searchVal = document.getElementById('attendanceSearch').value.toLowerCase();
@@ -2292,217 +2736,7 @@ function deleteEmployee(empId) {
     showNotification("Empleado eliminado.");
 }
 
-// --- REAL-TIME URGENT TASKS LOGIC ---
-let alarmInterval = null;
-let currentUrgentAlertTask = null;
-
-async function sendUrgentTask(event) {
-    event.preventDefault();
-    const taskText = document.getElementById('urgentTaskText').value.trim();
-    const targetRole = document.getElementById('urgentTaskTarget').value;
-    const targetShift = document.getElementById('urgentTaskShift').value;
-    
-    if (!taskText) return;
-    
-    const todayStr = formatDateString(new Date());
-    const newUrgentTask = {
-        id: Date.now(),
-        date: todayStr,
-        shift: targetShift,
-        role_name: targetRole === 'Todos' ? 'Colaborativa' : targetRole,
-        task_name: taskText,
-        completed: false,
-        is_collaborative: targetRole === 'Todos',
-        subtasks_state: [],
-        Imprescindible: 'No',
-        is_urgent: true,
-        urgent_acknowledged: false
-    };
-    
-    // Add locally
-    dailyTasks.push(newUrgentTask);
-    saveLocalDatabase();
-    
-    // Reset form
-    document.getElementById('urgentTaskText').value = "";
-    showNotification("🚨 Tarea de urgencia enviada.");
-    
-    // Sync to Supabase
-    if (supabaseClient) {
-        try {
-            const { error } = await supabaseClient.from('roods_daily_tasks').insert(newUrgentTask);
-            if (error) throw error;
-        } catch (e) {
-            console.error("Failed to insert urgent task to Supabase:", e);
-            showNotification("⚠️ Creada localmente. Error de sincronización.");
-        }
-    }
-    
-    // Refresh admin view
-    renderAdminMonitoreo();
-}
-
-function playSirenSound() {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    
-    const ctx = new AudioContext();
-    let isHigh = false;
-    
-    const playTone = () => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(isHigh ? 950 : 750, ctx.currentTime);
-        
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
-        
-        osc.start();
-        osc.stop(ctx.currentTime + 0.5);
-        
-        isHigh = !isHigh;
-    };
-    
-    playTone();
-    alarmInterval = setInterval(playTone, 600);
-}
-
-function stopSirenSound() {
-    if (alarmInterval) {
-        clearInterval(alarmInterval);
-        alarmInterval = null;
-    }
-}
-
-function triggerUrgentAlertIfApplicable(task) {
-    if (!currentUser) return;
-    const schedule = resolveTodaySchedule(currentUser.id, new Date());
-    if (!schedule) return;
-    
-    const matchesShift = task.shift === 'Ambos' || task.shift === schedule.shift;
-    const matchesRole = task.role_name === 'Colaborativa' || schedule.roles.includes(task.role_name);
-    
-    if (matchesShift && matchesRole && !task.urgent_acknowledged && !task.completed) {
-        const modal = document.getElementById('urgentAlertModal');
-        const text = document.getElementById('urgentAlertTaskText');
-        if (modal && text) {
-            text.textContent = task.task_name;
-            modal.classList.remove('hidden');
-            
-            if (!alarmInterval) {
-                playSirenSound();
-            }
-            
-            currentUrgentAlertTask = task;
-        }
-    }
-}
-
-async function acknowledgeUrgentAlert() {
-    stopSirenSound();
-    
-    const modal = document.getElementById('urgentAlertModal');
-    if (modal) {
-        modal.classList.add('hidden');
-    }
-    
-    if (currentUrgentAlertTask) {
-        currentUrgentAlertTask.urgent_acknowledged = true;
-        saveLocalDatabase();
-        
-        if (supabaseClient) {
-            try {
-                const { error } = await supabaseClient
-                    .from('roods_daily_tasks')
-                    .update({ urgent_acknowledged: true })
-                    .eq('id', currentUrgentAlertTask.id);
-                if (error) throw error;
-            } catch (e) {
-                console.error("Failed to update urgent task in cloud:", e);
-            }
-        }
-        
-        currentUrgentAlertTask = null;
-    }
-    
-    const today = new Date();
-    const todayStr = formatDateString(today);
-    const schedule = resolveTodaySchedule(currentUser.id, today);
-    if (schedule) {
-        renderChecklists(todayStr, schedule);
-    }
-}
-
-async function checkForUrgentTasks() {
-    if (!currentUser || currentUser.is_admin) return;
-    
-    const today = new Date();
-    const todayStr = formatDateString(today);
-    const schedule = resolveTodaySchedule(currentUser.id, today);
-    if (!schedule) return;
-    
-    if (supabaseClient) {
-        try {
-            const { data, error } = await supabaseClient
-                .from('roods_daily_tasks')
-                .select('*')
-                .eq('task_date', todayStr)
-                .eq('is_urgent', true);
-                
-            if (!error && data) {
-                let hasNew = false;
-                data.forEach(newTask => {
-                    const mappedTask = {
-                        id: newTask.id,
-                        date: newTask.task_date,
-                        shift: newTask.shift,
-                        role_name: newTask.assigned_role,
-                        task_name: newTask.task_name,
-                        completed: newTask.completed,
-                        is_collaborative: newTask.is_collaborative,
-                        subtasks_state: newTask.subtasks_state || [],
-                        Imprescindible: newTask.Imprescindible || 'No',
-                        is_urgent: newTask.is_urgent,
-                        urgent_acknowledged: newTask.urgent_acknowledged
-                    };
-                    
-                    const existingIdx = dailyTasks.findIndex(d => d.id === mappedTask.id);
-                    if (existingIdx === -1) {
-                        dailyTasks.push(mappedTask);
-                        hasNew = true;
-                    } else {
-                        // Keep acknowledgement and completion in sync
-                        dailyTasks[existingIdx].urgent_acknowledged = mappedTask.urgent_acknowledged;
-                        dailyTasks[existingIdx].completed = mappedTask.completed;
-                    }
-                });
-                
-                if (hasNew) {
-                    saveLocalDatabase();
-                }
-            }
-        } catch (e) {
-            console.warn("Polling for urgent tasks failed:", e);
-        }
-    }
-    
-    // Alert on any unacknowledged urgent task matching current user's profile
-    const todayTasks = dailyTasks.filter(d => 
-        d.date === todayStr && 
-        (d.shift === 'Ambos' || d.shift === schedule.shift) && 
-        (d.role_name === 'Colaborativa' || schedule.roles.includes(d.role_name))
-    );
-    
-    const urgentUnack = todayTasks.find(t => t.is_urgent && !t.urgent_acknowledged && !t.completed);
-    if (urgentUnack) {
-        triggerUrgentAlertIfApplicable(urgentUnack);
-    }
-}
+// --- REAL-TIME URGENT TASKS LOGIC REMOVED ---
 
 function refreshEmployeeTasksUI() {
     if (!currentUser || currentUser.is_admin) return;
@@ -2879,7 +3113,10 @@ function renderMuroMessages() {
                     <div class="muro-msg-content">
                         <div class="muro-msg-header">
                             <span class="muro-msg-sender">${displayName}</span>
-                            <span class="muro-msg-time">${timeStr}</span>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="muro-msg-time">${timeStr}</span>
+                                ${(currentUser && currentUser.is_admin && msg.id) ? `<button onclick="deleteMuroMessage(${msg.id})" style="background: none; border: none; color: #f44336; cursor: pointer; padding: 0 4px; font-size: 0.9rem;" title="Eliminar mensaje">🗑️</button>` : ''}
+                            </div>
                         </div>
                         <span class="muro-msg-text">${msg.message}</span>
                     </div>
@@ -2895,6 +3132,25 @@ function renderMuroMessages() {
     if (adminList) {
         adminList.innerHTML = listHtml;
         adminList.scrollTop = adminList.scrollHeight;
+    }
+}
+
+async function deleteMuroMessage(id) {
+    if (!confirm("¿Seguro que quieres borrar este mensaje del muro?")) return;
+    
+    // Optimistic delete
+    muroMessages = muroMessages.filter(m => m.id !== id);
+    renderMuroMessages();
+    
+    if (supabaseClient) {
+        try {
+            const { error } = await supabaseClient.from('roods_messages').delete().eq('id', id);
+            if (error) throw error;
+        } catch (e) {
+            console.error("Error deleting message:", e);
+            showNotification("Error al borrar el mensaje.");
+            loadMuroMessages(); // Reload from DB
+        }
     }
 }
 
@@ -3015,8 +3271,8 @@ function initApp() {
         setSyncIndicator("Offline (Local)", "");
     }
     
-    // Check and poll for urgent tasks every 5 seconds
-    setInterval(checkForUrgentTasks, 5000);
+    // Poll for messages and announcements every 15 seconds
+    setInterval(pollEmployeeMessages, 15000);
 }
 
 if (document.readyState === 'loading') {
@@ -3024,3 +3280,23 @@ if (document.readyState === 'loading') {
 } else {
     initApp();
 }
+
+// --- AGGRESSIVE SYNC/RECONNECT LOGIC ---
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        if (navigator.onLine && typeof supabaseClient !== 'undefined' && supabaseClient) {
+            console.log("App became visible. Forcing sync...");
+            setSyncIndicator("Sincronizando...", "");
+            fetchCloudData();
+            if (typeof pollEmployeeMessages === 'function') pollEmployeeMessages();
+        }
+    }
+});
+
+window.addEventListener('online', () => {
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        console.log("Internet connection restored. Forcing sync...");
+        setSyncIndicator("Sincronizando...", "");
+        fetchCloudData();
+    }
+});
