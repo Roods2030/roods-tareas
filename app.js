@@ -1763,10 +1763,8 @@ async function renderHistorialTasks() {
         dateInput.value = `${yyyy}-${mm}-${dd}`;
     }
     
-    // Convert YYYY-MM-DD from input to DD/MM/YYYY for DB match
-    const parts = dateInput.value.split('-');
-    if (parts.length !== 3) return;
-    const targetDateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
+    // The input date is already YYYY-MM-DD, which matches the DB format
+    const targetDateStr = dateInput.value;
     
     grid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;">Cargando historial de la base de datos... ⏳</div>';
     
@@ -3287,7 +3285,7 @@ document.addEventListener('visibilitychange', () => {
         if (navigator.onLine && typeof supabaseClient !== 'undefined' && supabaseClient) {
             console.log("App became visible. Forcing sync...");
             setSyncIndicator("Sincronizando...", "");
-            fetchCloudData();
+            syncFromCloud();
             if (typeof pollEmployeeMessages === 'function') pollEmployeeMessages();
         }
     }
@@ -3297,6 +3295,6 @@ window.addEventListener('online', () => {
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         console.log("Internet connection restored. Forcing sync...");
         setSyncIndicator("Sincronizando...", "");
-        fetchCloudData();
+        syncFromCloud();
     }
 });
