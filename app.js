@@ -2060,7 +2060,8 @@ function renderAdminCsvView() {
     
     let filteredTemplates = taskTemplates;
     if (filterVal !== 'ALL') {
-        filteredTemplates = taskTemplates.filter(t => t.Rol === filterVal);
+        const lowerFilter = filterVal.toLowerCase().trim();
+        filteredTemplates = taskTemplates.filter(t => t.Rol && t.Rol.toLowerCase().includes(lowerFilter));
     }
 
     if (filteredTemplates.length === 0) {
