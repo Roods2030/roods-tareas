@@ -719,6 +719,13 @@ function performCheckIn(roleKey) {
 }
 
 function performCheckOut(roleKey) {
+    // Check for unread messages first
+    const badge = document.getElementById('mensajesBadgeDot');
+    if (badge && !badge.classList.contains('hidden')) {
+        alert("⚠️ NO PUEDES REGISTRAR TU SALIDA.\n\nTienes mensajes nuevos sin leer en tu buzón. Por favor, revisa la pestaña 'Mensajes' antes de salir.");
+        return;
+    }
+
     if (!roleKey) {
         const today = new Date();
         const schedules = resolveTodaySchedules(currentUser.id, today);
@@ -1290,75 +1297,6 @@ function acknowledgeGlobalAnnounce() {
 }
 
 
-// --- SHIFT SWAP MODAL LOGIC ---
-function openSwapModal() {
-    const select = document.getElementById('swapCover');
-    if (!select) return;
-    
-    // Populate with other employees
-    select.innerHTML = '<option value="" disabled selected>Selecciona un compañero...</option>';
-    employees.forEach(e => {
-        if (!e.is_admin && e.id !== currentUser.id) {
-            const opt = document.createElement('option');
-            opt.value = e.id;
-            opt.textContent = e.name;
-            select.appendChild(opt);
-        }
-    });
-
-    // Set minimum date to today
-    const dateInput = document.getElementById('swapDate');
-    const today = new Date();
-    dateInput.min = formatDateString(today);
-
-    document.getElementById('swapModal').classList.remove('hidden');
-}
-
-function closeSwapModal() {
-    document.getElementById('swapModal').classList.add('hidden');
-    document.getElementById('swapForm').reset();
-}
-
-function submitSwapRequest(e) {
-    e.preventDefault();
-    const dateVal = document.getElementById('swapDate').value;
-    const coverId = parseInt(document.getElementById('swapCover').value);
-
-    // Validate date is not a Tuesday
-    const targetDate = new Date(dateVal + "T00:00:00");
-    if (targetDate.getDay() === 2) {
-        alert("⚠️ No puedes solicitar cambios para un Martes, es el día de descanso de la cafetería.");
-        return;
-    }
-
-    // Determine current employee's schedule for that future date
-    const schedule = resolveTodaySchedule(currentUser.id, targetDate);
-    if (!schedule) {
-        alert("⚠️ No tienes un rol asignado para esa fecha, por lo que no es necesario cambiarlo.");
-        return;
-    }
-
-    const request = {
-        id: Date.now(),
-        request_date: dateVal,
-        from_employee_id: currentUser.id,
-        from_employee_name: currentUser.name,
-        to_employee_id: coverId,
-        to_employee_name: employees.find(e => e.id === coverId).name,
-        role_name: schedule.roleDisplay,
-        shift: schedule.shift,
-        status: 'pendiente',
-        timestamp: new Date().toISOString()
-    };
-
-    swapRequests.push(request);
-    saveLocalDatabase();
-    pushToCloudTable('roods_swaps', request);
-
-    closeSwapModal();
-    showNotification("🚀 Solicitud enviada a RH correctamente.");
-}
-
 // --- HR ADMIN VIEW LOGIC ---
 function initAdminView() {
     switchAdminTab('monitoreo');
@@ -1393,7 +1331,6 @@ function switchAdminTab(tabId) {
     if (tabId === 'comunicados') renderAdminComunicados();
     if (tabId === 'asistencia') renderAdminAttendance();
     if (tabId === 'roles') renderAdminWeeklyRoles();
-    if (tabId === 'swaps') renderAdminSwaps();
     if (tabId === 'tareas-csv') renderAdminCsvView();
     if (tabId === 'empleados') renderAdminEmployees();
     if (tabId === 'muro-avisos-admin') {
@@ -1405,21 +1342,6 @@ function switchAdminTab(tabId) {
         }
         localStorage.setItem('roods_last_read_muro', lastReadMuroTimestamp);
         updateMuroBadge();
-    }
-
-    updateSwapsBadge();
-}
-
-function updateSwapsBadge() {
-    const pendingCount = swapRequests.filter(s => s.status === 'pendiente').length;
-    const badge = document.getElementById('swapsBadge');
-    if (badge) {
-        if (pendingCount > 0) {
-            badge.textContent = pendingCount;
-            badge.classList.remove('hidden');
-        } else {
-            badge.classList.add('hidden');
-        }
     }
 }
 
@@ -2113,61 +2035,7 @@ function saveWeeklyRoles() {
     }
 }
 
-// --- ADMIN TAB: SOLICITUDES DE CAMBIOS (SWAPS) ---
-function renderAdminSwaps() {
-    const list = document.getElementById('adminSwapsList');
-    if (!list) return;
-    list.innerHTML = "";
-
-    // Sort, newest first
-    const sorted = [...swapRequests].sort((a, b) => b.id - a.id);
-
-    if (sorted.length === 0) {
-        list.innerHTML = '<div class="empty-state"><span class="empty-state-icon">🔄</span>No se han registrado solicitudes de intercambio.</div>';
-        return;
-    }
-
-    sorted.forEach(s => {
-        const card = document.createElement('div');
-        card.className = "swap-card";
-
-        const formattedDate = new Date(s.request_date + "T00:00:00").toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'short' });
-
-        let actionHtml = "";
-        if (s.status === 'pendiente') {
-            actionHtml = `
-                <div class="swap-card-actions">
-                    <button class="btn-primary btn-small btn-approve" onclick="resolveSwap(${s.id}, 'aprobado')">Aprobar ✓</button>
-                    <button class="btn-secondary btn-small btn-reject" onclick="resolveSwap(${s.id}, 'rechazado')">Rechazar ✗</button>
-                </div>
-            `;
-        }
-
-        card.innerHTML = `
-            <div class="swap-card-info">
-                <h4>${s.from_employee_name} solicita cobertura</h4>
-                <p>Compañero que cubre: <strong>${s.to_employee_name}</strong></p>
-                <p>Fecha: <strong>${formattedDate}</strong> | Rol: <strong>${s.role_name}</strong> | Turno: <strong>${s.shift}</strong></p>
-                <p style="margin-top: 6px;">Estatus: <span class="swap-badge ${s.status}">${s.status.toUpperCase()}</span></p>
-            </div>
-            ${actionHtml}
-        `;
-        list.appendChild(card);
-    });
-}
-
-function resolveSwap(swapId, status) {
-    const idx = swapRequests.findIndex(s => s.id === swapId);
-    if (idx === -1) return;
-
-    swapRequests[idx].status = status;
-    saveLocalDatabase();
-    pushToCloudTable('roods_swaps', swapRequests[idx]);
-
-    showNotification(`Solicitud de cambio ${status} exitosamente.`);
-    renderAdminSwaps();
-    updateSwapsBadge();
-}
+// --- ADMIN TAB: TAREAS CSV ---
 
 // --- ADMIN TAB: TAREAS CSV ---
 // --- ADMIN TAB: TAREAS CRUD & CSV ---
@@ -2186,12 +2054,21 @@ function renderAdminCsvView() {
     ensureTemplateIds();
     preview.innerHTML = "";
 
-    if (taskTemplates.length === 0) {
-        preview.innerHTML = `<tr><td colspan="7" class="text-center text-light" style="padding: 20px;">No hay tareas cargadas. Usa el botón "Agregar Nueva Tarea" o importa un CSV.</td></tr>`;
+    let filterVal = 'ALL';
+    const filterSelect = document.getElementById('taskFilterRole');
+    if (filterSelect) filterVal = filterSelect.value;
+    
+    let filteredTemplates = taskTemplates;
+    if (filterVal !== 'ALL') {
+        filteredTemplates = taskTemplates.filter(t => t.Rol === filterVal);
+    }
+
+    if (filteredTemplates.length === 0) {
+        preview.innerHTML = `<tr><td colspan="7" class="text-center text-light" style="padding: 20px;">No hay tareas cargadas o que coincidan con el filtro.</td></tr>`;
         return;
     }
 
-    taskTemplates.forEach(t => {
+    filteredTemplates.forEach(t => {
         const tr = document.createElement('tr');
         const impVal = t.Imprescindible || "No";
         const subsList = t.Subtareas ? t.Subtareas.split(';').map(s => s.trim()).filter(s => s) : [];

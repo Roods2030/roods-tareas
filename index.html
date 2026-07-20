@@ -190,10 +190,6 @@
                         </div>
                     </div>
 
-                    <!-- Swap Shift Request Button -->
-                    <div class="swap-trigger-container">
-                        <button class="btn-outline-full" onclick="openSwapModal()">Solicitar Cambio de Turno/Rol 🔄</button>
-                    </div>
                 </div>
 
                 <!-- Footer / Logout -->
@@ -217,7 +213,6 @@
                     <button class="tab-btn" id="tabHistorial" onclick="switchAdminTab('historial')">Historial 📆</button>
                     <button class="tab-btn" id="tabAsistencia" onclick="switchAdminTab('asistencia')">Asistencia</button>
                     <button class="tab-btn" id="tabRoles" onclick="switchAdminTab('roles')">Roles Semanales</button>
-                    <button class="tab-btn" id="tabSwaps" onclick="switchAdminTab('swaps')">Cambios <span class="badge hidden" id="swapsBadge">0</span></button>
                     <button class="tab-btn" id="tabTareasCsv" onclick="switchAdminTab('tareas-csv')">Tareas CSV</button>
                     <button class="tab-btn" id="tabEmpleados" onclick="switchAdminTab('empleados')">Empleados</button>
                     <button class="tab-btn" id="tabComunicados" onclick="switchAdminTab('comunicados')">Comunicados 📢</button>
@@ -418,14 +413,6 @@
                     <p class="save-status" id="rolesSaveStatus">Roles guardados automáticamente 💾</p>
                 </div>
 
-                <!-- ADMIN TAB CONTENT: SOLICITUDES DE CAMBIOS -->
-                <div class="tab-content admin-content" id="adminContentSwaps">
-                    <h3>Solicitudes de Intercambio de Turno / Rol</h3>
-                    <div class="swaps-list" id="adminSwapsList">
-                        <!-- Populated by JS -->
-                    </div>
-                </div>
-
                 <!-- ADMIN TAB CONTENT: TAREAS CSV -->
                 <div class="tab-content admin-content" id="adminContentTareasCsv">
                     <div class="flex-header">
@@ -435,12 +422,26 @@
                     <p class="description">Administra las tareas base directamente en la tabla o expórtalas/impórtalas en formato CSV si prefieres hojas de cálculo.</p>
                     
                     <div class="csv-actions-box" style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                        <button class="btn-small" onclick="downloadTemplateCsv()">Descargar Plantilla CSV 📥</button>
+                        <div class="form-group" style="margin: 0; min-width: 150px;">
+                            <select id="taskFilterRole" class="form-control" style="padding: 6px 10px; font-size: 0.85rem;" onchange="renderAdminCsvView()">
+                                <option value="ALL">-- Todos los roles --</option>
+                                <option value="Cajero">Cajero</option>
+                                <option value="Barista">Barista</option>
+                                <option value="Cocina">Cocina</option>
+                                <option value="Cajero - Barista">Cajero - Barista</option>
+                                <option value="Cocina - Barista">Cocina - Barista</option>
+                                <option value="Aux. Administrativo">Aux. Administrativo</option>
+                                <option value="Apoyo General">Apoyo General</option>
+                                <option value="Apoyo Cocina">Apoyo Cocina</option>
+                                <option value="Colaborativa">Colaborativa (Todos)</option>
+                            </select>
+                        </div>
+                        <button class="btn-small" onclick="downloadTemplateCsv()">Descargar Plantilla 📥</button>
                         <div class="file-upload-wrapper" style="margin: 0;">
-                            <label for="importCsvFile" class="btn-small btn-outline" style="padding: 6px 12px; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(0,0,0,0.1); margin: 0; cursor: pointer; display: inline-block;">Importar Archivo CSV 📤</label>
+                            <label for="importCsvFile" class="btn-small btn-outline" style="padding: 6px 12px; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(0,0,0,0.1); margin: 0; cursor: pointer; display: inline-block;">Importar CSV 📤</label>
                             <input type="file" id="importCsvFile" accept=".csv" class="hidden-file-input" onchange="importCsv(event)">
                         </div>
-                        <button class="btn-delete-small" style="padding: 6px 12px; font-weight: 700; border-radius: 8px; margin: 0;" onclick="clearAllTaskTemplates()">Vaciar Tareas Preestablecidas 🗑️</button>
+                        <button class="btn-delete-small" style="padding: 6px 12px; font-weight: 700; border-radius: 8px; margin: 0;" onclick="clearAllTaskTemplates()">Vaciar Tareas 🗑️</button>
                     </div>
                     <div class="table-container" style="max-height: 450px; overflow-y: auto;">
                         <table class="admin-table">
@@ -524,28 +525,6 @@
                     <input type="text" id="profileNickname" required class="form-control" placeholder="Ej. Juanito">
                 </div>
                 <button type="submit" class="btn-submit" style="width: 100%; justify-content: center;">Guardar Cambios 💾</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- MODAL: SWAP SHIFT REQUEST -->
-    <div id="swapModal" class="modal hidden">
-        <div class="modal-content card glass">
-            <button class="btn-close" onclick="closeSwapModal()">×</button>
-            <h3>Solicitar Cambio de Turno/Rol</h3>
-            <p class="subtitle">Selecciona la fecha y el compañero que te cubrirá. Tu solicitud deberá ser autorizada por RH.</p>
-            <form id="swapForm" onsubmit="submitSwapRequest(event)">
-                <div class="form-group">
-                    <label for="swapDate">Fecha del Turno a Cambiar:</label>
-                    <input type="date" id="swapDate" required class="form-control">
-                </div>
-                <div class="form-group">
-                    <label for="swapCover">Compañero que te cubrirá:</label>
-                    <select id="swapCover" required class="form-control">
-                        <!-- Populated by JS -->
-                    </select>
-                </div>
-                <button type="submit" class="btn-submit">Enviar Solicitud a RH 🚀</button>
             </form>
         </div>
     </div>
@@ -663,7 +642,7 @@
     <!-- Supabase SDK (loaded locally to prevent CDN/blockage issues) -->
     <script src="supabase.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.0.22"></script>
+    <script src="app.js?v=1.0.23"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
