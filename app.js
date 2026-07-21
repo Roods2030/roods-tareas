@@ -748,7 +748,22 @@ function performCheckOut(roleKey) {
         (d.shift === roleInfo.shift || d.shift === 'Ambos') && 
         (roleInfo.taskRoles.includes(d.role_name) || d.role_name === roleInfo.name || d.role_name === roleInfo.key || d.role_name === 'Colaborativa')
     );
-    const pendingMandatory = empTasks.filter(t => t.Imprescindible === 'Si' && !t.completed);
+    
+    // Deduplicate for validation (if one instance is completed, all are considered completed)
+    const seenTasks = new Map();
+    empTasks.forEach(t => {
+        if (!seenTasks.has(t.task_name)) {
+            seenTasks.set(t.task_name, t);
+        } else {
+            // If any duplicate is completed, mark the stored one as completed
+            if (t.completed) seenTasks.get(t.task_name).completed = true;
+        }
+    });
+
+    const pendingMandatory = Array.from(seenTasks.values()).filter(t => 
+        (t.Imprescindible === 'Si' || t.Imprescindible === 'Sí' || t.Imprescindible === 'SI') && !t.completed
+    );
+
     if (pendingMandatory.length > 0) {
         let taskNames = pendingMandatory.map(t => `• ${t.task_name}`).join("\n");
         alert(`⚠️ NO PUEDES REGISTRAR TU SALIDA.\n\nTienes tareas de seguridad o cierre imprescindibles pendientes para ${roleInfo.name}:\n\n${taskNames}\n\nPor favor, complétalas para poder checar tu salida.`);
@@ -1076,33 +1091,37 @@ function createTaskItemElement(task, isCollab) {
 }
 
 function toggleMainTask(taskId, isCollab) {
-    const idx = dailyTasks.findIndex(d => d.id === taskId);
-    if (idx === -1) return;
+    const taskObj = dailyTasks.find(d => d.id === taskId);
+    if (!taskObj) return;
 
-    const task = dailyTasks[idx];
-    task.completed = !task.completed;
+    const newCompletedState = !taskObj.completed;
+    
+    // Find all duplicates of this task for the same date (e.g. mixed roles)
+    const duplicates = dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name);
+    
+    duplicates.forEach(task => {
+        task.completed = newCompletedState;
+        if (task.completed) {
+            task.completed_by_employee_id = currentUser.id;
+            task.completed_by_name = currentUser.name;
+            task.completed_at = new Date().toISOString();
+            if (task.subtasks_state) {
+                task.subtasks_state.forEach(s => s.completed = true);
+            }
+        } else {
+            task.completed_by_employee_id = null;
+            task.completed_by_name = null;
+            task.completed_at = null;
+            if (task.subtasks_state) {
+                task.subtasks_state.forEach(s => s.completed = false);
+            }
+        }
+    });
 
-    if (task.completed) {
-        task.completed_by_employee_id = currentUser.id;
-        task.completed_by_name = currentUser.name;
-        task.completed_at = new Date().toISOString();
-        // If it has subtasks, mark all subtasks as completed
-        if (task.subtasks_state) {
-            task.subtasks_state.forEach(s => s.completed = true);
-        }
-        showNotification("✓ Tarea completada!");
-    } else {
-        task.completed_by_employee_id = null;
-        task.completed_by_name = null;
-        task.completed_at = null;
-        // If it has subtasks, mark all subtasks as pending
-        if (task.subtasks_state) {
-            task.subtasks_state.forEach(s => s.completed = false);
-        }
-    }
+    if (newCompletedState) showNotification("✓ Tarea completada!");
 
     saveLocalDatabase();
-    pushToCloudTable('roods_daily_tasks', task);
+    pushToCloudTable('roods_daily_tasks', duplicates);
 
     // Refresh UI
     const today = new Date();
@@ -1112,33 +1131,31 @@ function toggleMainTask(taskId, isCollab) {
 }
 
 function toggleSubtask(taskId, subIdx, isChecked, isCollab) {
-    const idx = dailyTasks.findIndex(d => d.id === taskId);
-    if (idx === -1) return;
+    const taskObj = dailyTasks.find(d => d.id === taskId);
+    if (!taskObj) return;
 
-    const task = dailyTasks[idx];
-    if (!task.subtasks_state || !task.subtasks_state[subIdx]) return;
+    const duplicates = dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name);
 
-    task.subtasks_state[subIdx].completed = isChecked;
+    duplicates.forEach(task => {
+        if (!task.subtasks_state || !task.subtasks_state[subIdx]) return;
+        task.subtasks_state[subIdx].completed = isChecked;
 
-    // Check if all subtasks are completed
-    const allCompleted = task.subtasks_state.every(s => s.completed);
-
-    if (allCompleted) {
-        task.completed = true;
-        task.completed_by_employee_id = currentUser.id;
-        task.completed_by_name = currentUser.name;
-        task.completed_at = new Date().toISOString();
-        showNotification("✓ Tarea completada!");
-    } else {
-        // If previously completed, mark as incomplete
-        task.completed = false;
-        task.completed_by_employee_id = null;
-        task.completed_by_name = null;
-        task.completed_at = null;
-    }
+        const allCompleted = task.subtasks_state.every(s => s.completed);
+        if (allCompleted) {
+            task.completed = true;
+            task.completed_by_employee_id = currentUser.id;
+            task.completed_by_name = currentUser.name;
+            task.completed_at = new Date().toISOString();
+        } else {
+            task.completed = false;
+            task.completed_by_employee_id = null;
+            task.completed_by_name = null;
+            task.completed_at = null;
+        }
+    });
 
     saveLocalDatabase();
-    pushToCloudTable('roods_daily_tasks', task);
+    pushToCloudTable('roods_daily_tasks', duplicates);
 
     // Refresh UI
     const today = new Date();
