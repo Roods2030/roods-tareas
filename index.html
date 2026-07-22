@@ -96,6 +96,11 @@
                     <button class="pin-btn" onclick="pressPin('0')">0</button>
                     <button class="pin-btn action-btn" onclick="backspacePin()">⌫</button>
                 </div>
+                <div style="margin-top: 15px; text-align: center;">
+                    <span id="kioskStatusBadge" style="font-size:0.75rem; font-weight:bold; padding: 5px 12px; border-radius: 12px; background: rgba(0,0,0,0.05); color: #666; display: inline-block;">
+                        📱 Dispositivo: Personal
+                    </span>
+                </div>
             </div>
         </section>
 
@@ -204,7 +209,10 @@
             <div class="card glass admin-card">
                 <div class="admin-header">
                     <h2>Consola de Administración RH</h2>
-                    <button class="btn-back" onclick="logout()">Cerrar Sesión 🚪</button>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <button class="btn-small btn-outline" id="btnToggleKiosk" onclick="toggleKioskMode()" style="font-size:0.8rem; font-weight:bold; padding: 6px 12px; margin: 0; border-radius: 8px;">📱 Tablet de Caja: Desactivada ❌</button>
+                        <button class="btn-back" onclick="logout()" style="margin: 0;">Cerrar Sesión 🚪</button>
+                    </div>
                 </div>
 
                 <!-- Admin Tab Navigation -->
@@ -642,7 +650,7 @@
     <!-- Supabase SDK (loaded locally to prevent CDN/blockage issues) -->
     <script src="supabase.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.0.25"></script>
+    <script src="app.js?v=1.0.26"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {

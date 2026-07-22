@@ -630,11 +630,16 @@ function updateAttendanceUI(today, schedules) {
 
         let statusText = "";
         let actionBtnHtml = "";
+        const kiosk = isKioskDevice();
 
         if (!checkIn) {
             // Not checked in
             statusText = `<span style="font-size:0.85rem; color:var(--text-secondary);">⏳ Horario: ${sched.hours}</span>`;
-            actionBtnHtml = `<button class="btn-primary" onclick="performCheckIn('${sched.roleKey}')" style="padding: 6px 14px; font-size:0.85rem; border:none; border-radius:8px;">Entrada 📥</button>`;
+            if (kiosk) {
+                actionBtnHtml = `<button class="btn-primary" onclick="performCheckIn('${sched.roleKey}')" style="padding: 6px 14px; font-size:0.85rem; border:none; border-radius:8px;">Entrada 📥</button>`;
+            } else {
+                actionBtnHtml = `<span style="font-size:0.75rem; color:#c62828; font-weight:700; background:rgba(211,47,47,0.08); padding:5px 9px; border-radius:6px; border:1px solid rgba(211,47,47,0.2); display:inline-block;">📱 Checar en Tablet</span>`;
+            }
         } else if (checkIn && !checkOut) {
             // Active
             isAnyActive = true;
@@ -642,7 +647,11 @@ function updateAttendanceUI(today, schedules) {
             activeRolesList.push(sched.roleName);
             activeRolesList.push(sched.roleKey);
             statusText = `<span style="font-size:0.85rem; color:#388E3C; font-weight:700;">🟢 Entrada: ${checkIn.time}</span>`;
-            actionBtnHtml = `<button class="btn-secondary" onclick="performCheckOut('${sched.roleKey}')" style="padding: 6px 14px; font-size:0.85rem; border:none; border-radius:8px;">Salida 📤</button>`;
+            if (kiosk) {
+                actionBtnHtml = `<button class="btn-secondary" onclick="performCheckOut('${sched.roleKey}')" style="padding: 6px 14px; font-size:0.85rem; border:none; border-radius:8px;">Salida 📤</button>`;
+            } else {
+                actionBtnHtml = `<span style="font-size:0.75rem; color:#c62828; font-weight:700; background:rgba(211,47,47,0.08); padding:5px 9px; border-radius:6px; border:1px solid rgba(211,47,47,0.2); display:inline-block;">📱 Salida en Tablet</span>`;
+            }
         } else {
             // Checked out
             statusText = `<span style="font-size:0.85rem; color:var(--text-light); text-decoration: line-through;">🏁 Salida: ${checkOut.time} (Terminado)</span>`;
@@ -676,11 +685,21 @@ function updateAttendanceUI(today, schedules) {
     } else {
         statusDot.className = "status-indicator-dot";
         container.classList.add('locked');
-        shiftsContainer.innerHTML += `<p class="attendance-message" style="margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary);">🔒 Por favor checa tu entrada en tu turno activo para desbloquear tus tareas de hoy.</p>`;
+        const kiosk = isKioskDevice();
+        if (kiosk) {
+            shiftsContainer.innerHTML += `<p class="attendance-message" style="margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary);">🔒 Por favor checa tu entrada en tu turno activo para desbloquear tus tareas de hoy.</p>`;
+        } else {
+            shiftsContainer.innerHTML += `<p class="attendance-message" style="margin-top: 10px; font-size: 0.85rem; color: #c62828; font-weight: 600;">📱 Por favor checa tu entrada en la Tablet de Caja para desbloquear tus tareas de hoy.</p>`;
+        }
     }
 }
 
 function performCheckIn(roleKey) {
+    if (!isKioskDevice()) {
+        alert("📱 ACCESO RESTRINGIDO:\n\nEl registro de Entrada sólo puede realizarse desde la Tablet de Caja.");
+        return;
+    }
+
     if (!roleKey) {
         const today = new Date();
         const schedules = resolveTodaySchedules(currentUser.id, today);
@@ -719,6 +738,11 @@ function performCheckIn(roleKey) {
 }
 
 function performCheckOut(roleKey) {
+    if (!isKioskDevice()) {
+        alert("📱 ACCESO RESTRINGIDO:\n\nEl registro de Salida sólo puede realizarse desde la Tablet de Caja.");
+        return;
+    }
+
     // Check for unread messages first
     const badge = document.getElementById('mensajesBadgeDot');
     if (badge && !badge.classList.contains('hidden')) {
@@ -3146,6 +3170,7 @@ function subscribeToMuroMessages() {
 function initApp() {
     loadLocalDatabase();
     startClock();
+    updateKioskUI();
     
     // Initialize Supabase from statically loaded local SDK
     try {
@@ -3193,3 +3218,39 @@ window.addEventListener('online', () => {
         syncFromCloud();
     }
 });
+
+// --- KIOSK / TABLET DE CAJA HELPER FUNCTIONS ---
+function isKioskDevice() {
+    return localStorage.getItem('roods_is_kiosk_device') === 'true';
+}
+
+function toggleKioskMode() {
+    const current = isKioskDevice();
+    const next = !current;
+    localStorage.setItem('roods_is_kiosk_device', next ? 'true' : 'false');
+    updateKioskUI();
+    showNotification(next ? "📱 Este dispositivo ahora está autorizado como TABLET DE CAJA (Reloj Checador)." : "📱 Dispositivo configurado como PERSONAL (Solo consulta de tareas).");
+}
+
+function updateKioskUI() {
+    const kiosk = isKioskDevice();
+    const btn = document.getElementById('btnToggleKiosk');
+    if (btn) {
+        btn.textContent = kiosk ? "📱 Tablet de Caja: ACTIVADA ✅" : "📱 Tablet de Caja: Desactivada ❌";
+        btn.style.background = kiosk ? "rgba(56, 142, 60, 0.15)" : "";
+        btn.style.borderColor = kiosk ? "#388E3C" : "";
+        btn.style.color = kiosk ? "#2E7D32" : "";
+    }
+    const badge = document.getElementById('kioskStatusBadge');
+    if (badge) {
+        if (kiosk) {
+            badge.textContent = "📱 Estación de Caja (Reloj Checador Autorizado)";
+            badge.style.background = "rgba(56, 142, 60, 0.18)";
+            badge.style.color = "#2E7D32";
+        } else {
+            badge.textContent = "📱 Dispositivo: Móvil Personal";
+            badge.style.background = "rgba(0,0,0,0.05)";
+            badge.style.color = "#666";
+        }
+    }
+}
