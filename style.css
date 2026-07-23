@@ -482,6 +482,51 @@ body {
     margin-bottom: 15px;
 }
 
+/* Employee Specific Tabs (Segmented Control style for Mobile) */
+.employee-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 4px;
+    border-radius: var(--border-radius-medium);
+    border-bottom: none;
+    margin-bottom: 15px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.employee-tabs .tab-btn {
+    padding: 8px 2px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-align: center;
+    border-radius: var(--border-radius-small);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    line-height: 1.15;
+    white-space: normal;
+    word-break: break-word;
+    position: relative;
+    width: 100%;
+}
+
+.employee-tabs .tab-btn.active {
+    color: var(--primary-gradient-start);
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 480px) {
+    .employee-tabs .tab-btn {
+        font-size: 0.72rem;
+        padding: 6px 1px;
+    }
+}
+
 .tab-btn {
     background: none;
     border: none;

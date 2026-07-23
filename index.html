@@ -158,11 +158,11 @@
                     </div>
 
                     <!-- Task Tabs -->
-                    <div class="tab-navigation">
+                    <div class="tab-navigation employee-tabs">
                         <button class="tab-btn active" id="tabMisTareas" onclick="switchTaskTab('mis-tareas')">Mis Tareas</button>
                         <button class="tab-btn" id="tabColaborativas" onclick="switchTaskTab('colaborativas')">Tareas Turno</button>
                         <button class="tab-btn" id="tabMensajes" onclick="switchTaskTab('mensajes')">Mensajes <span class="badge-dot hidden" id="mensajesBadgeDot"></span></button>
-                        <button class="tab-btn" id="tabMuroAvisos" onclick="switchTaskTab('muro-avisos')">Muro de Avisos 💬 <span class="badge-dot hidden" id="muroBadgeDot"></span></button>
+                        <button class="tab-btn" id="tabMuroAvisos" onclick="switchTaskTab('muro-avisos')">Muro Avisos 💬 <span class="badge-dot hidden" id="muroBadgeDot"></span></button>
                     </div>
 
                     <!-- Task Lists -->
@@ -341,16 +341,33 @@
                 </div>
 
                 <!-- ADMIN TAB CONTENT: ASISTENCIA -->
+                <!-- ADMIN TAB CONTENT: ASISTENCIA -->
                 <div class="tab-content admin-content" id="adminContentAsistencia">
-                    <h3>Registro de Asistencia (Entradas y Salidas)</h3>
-                    <div class="search-box">
-                        <input type="text" id="attendanceSearch" placeholder="Filtrar por empleado..." oninput="renderAdminAttendance()">
+                    <div class="flex-header">
+                        <h3>Registro de Asistencia (Entradas y Salidas)</h3>
                     </div>
-                    <div class="table-container">
+                    
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 15px; margin-bottom: 15px;">
+                        <div class="search-box" style="margin: 0; flex-grow: 1; min-width: 180px;">
+                            <input type="text" id="attendanceSearch" placeholder="Buscar por empleado..." oninput="renderAdminAttendance()">
+                        </div>
+                        <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                            <select id="attendanceFilterType" class="form-control" style="padding: 6px 10px; font-size: 0.85rem; margin:0;" onchange="renderAdminAttendance()">
+                                <option value="ALL">Todas las fechas</option>
+                                <option value="DAY" selected>Filtrar por Día</option>
+                                <option value="WEEK">Filtrar por Semana (Mié-Lun)</option>
+                            </select>
+                            <input type="date" id="attendanceDateFilter" class="form-control" style="padding: 6px 10px; font-size: 0.85rem; width: auto; margin:0;" onchange="renderAdminAttendance()">
+                            <button class="btn-small" onclick="setAttendanceToday()" style="padding: 6px 12px; font-size: 0.85rem; margin:0;">Hoy 📅</button>
+                        </div>
+                    </div>
+                    
+                    <div class="table-container" style="max-height: 480px; overflow-y: auto;">
                         <table class="admin-table">
                             <thead>
                                 <tr>
                                     <th>Empleado</th>
+                                    <th>Rol / Turno</th>
                                     <th>Fecha</th>
                                     <th>Hora</th>
                                     <th>Tipo</th>
@@ -650,7 +667,7 @@
     <!-- Supabase SDK (loaded locally to prevent CDN/blockage issues) -->
     <script src="supabase.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.0.26"></script>
+    <script src="app.js?v=1.0.27"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {

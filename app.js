@@ -1924,33 +1924,70 @@ async function sendPrivateMessage(event) {
 }
 
 // --- ADMIN TAB: ASISTENCIA ---
+function setAttendanceToday() {
+    const dateInput = document.getElementById('attendanceDateFilter');
+    if (dateInput) {
+        dateInput.value = formatDateString(new Date());
+        renderAdminAttendance();
+    }
+}
+
 function renderAdminAttendance() {
     const tbody = document.getElementById('attendanceTableBody');
+    if (!tbody) return;
     tbody.innerHTML = "";
 
-    const searchVal = document.getElementById('attendanceSearch').value.toLowerCase();
+    const searchInput = document.getElementById('attendanceSearch');
+    const searchVal = searchInput ? searchInput.value.toLowerCase().trim() : "";
+
+    const filterTypeSelect = document.getElementById('attendanceFilterType');
+    const filterType = filterTypeSelect ? filterTypeSelect.value : 'DAY';
+
+    const dateInput = document.getElementById('attendanceDateFilter');
+    if (dateInput && !dateInput.value) {
+        dateInput.value = formatDateString(new Date());
+    }
+    const selectedDateStr = dateInput ? dateInput.value : formatDateString(new Date());
 
     // Sort logs chronologically, newest first
     const sorted = [...attendanceLogs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-    const filtered = sorted.filter(l => 
-        l.employee_name.toLowerCase().includes(searchVal)
+    let filtered = sorted.filter(l => 
+        !searchVal || (l.employee_name && l.employee_name.toLowerCase().includes(searchVal))
     );
 
+    if (filterType === 'DAY') {
+        filtered = filtered.filter(l => l.date === selectedDateStr);
+    } else if (filterType === 'WEEK') {
+        if (selectedDateStr) {
+            const targetDate = new Date(selectedDateStr + "T00:00:00");
+            const weekStart = getStartOfWeekWednesday(targetDate);
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 5); // Wednesday to Monday (+5 days)
+            
+            const startStr = formatDateString(weekStart);
+            const endStr = formatDateString(weekEnd);
+            
+            filtered = filtered.filter(l => l.date >= startStr && l.date <= endStr);
+        }
+    }
+
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-light">No hay registros de asistencia coincidentes.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-light" style="padding: 20px;">No hay registros de asistencia coincidentes para el filtro seleccionado.</td></tr>`;
         return;
     }
 
     filtered.forEach(log => {
         const tr = document.createElement('tr');
+        const roleDisplay = log.role_name ? log.role_name : (log.shift || 'General');
         tr.innerHTML = `
             <td class="bold-label">${log.employee_name}</td>
+            <td><span class="badge" style="background-color: #673ab7; font-weight:700; margin:0;">${roleDisplay}</span></td>
             <td>${log.date}</td>
-            <td style="font-feature-settings: 'tnum';">${log.time}</td>
+            <td style="font-feature-settings: 'tnum'; font-weight:600;">${log.time}</td>
             <td>
                 <span class="status-indicator-dot ${log.type === 'entrada' ? 'active' : ''}"></span>
-                ${log.type === 'entrada' ? 'Entrada 📥' : 'Salida 📤'}
+                ${log.type === 'entrada' ? '<strong style="color:#388E3C;">Entrada 📥</strong>' : '<strong style="color:#e91e63;">Salida 📤</strong>'}
             </td>
         `;
         tbody.appendChild(tr);
