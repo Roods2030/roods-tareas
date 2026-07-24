@@ -773,14 +773,15 @@ function performCheckOut(roleKey) {
         (roleInfo.taskRoles.includes(d.role_name) || d.role_name === roleInfo.name || d.role_name === roleInfo.key || d.role_name === 'Colaborativa')
     );
     
-    // Deduplicate for validation (if one instance is completed, all are considered completed)
+    // Deduplicate for validation per task and role
     const seenTasks = new Map();
     empTasks.forEach(t => {
-        if (!seenTasks.has(t.task_name)) {
-            seenTasks.set(t.task_name, t);
+        const key = t.task_name + '|' + t.role_name;
+        if (!seenTasks.has(key)) {
+            seenTasks.set(key, t);
         } else {
             // If any duplicate is completed, mark the stored one as completed
-            if (t.completed) seenTasks.get(t.task_name).completed = true;
+            if (t.completed) seenTasks.get(key).completed = true;
         }
     });
 
@@ -848,13 +849,13 @@ function generateDailyTasks(dateStr, schedule) {
         return shiftMatch && dayMatch;
     });
 
-    // Check if daily tasks already exist for this date (ignoring shift since Turno is removed)
+    // Check if daily tasks already exist for this date and role
     const existing = dailyTasks.filter(d => d.date === dateStr);
-    const existingTaskNames = new Set(existing.map(d => d.task_name));
+    const existingTaskKeys = new Set(existing.map(d => d.task_name + '|' + d.role_name));
     const newInstances = [];
 
     matchingTemplates.forEach(t => {
-        if (!existingTaskNames.has(t.Tarea)) {
+        if (!existingTaskKeys.has(t.Tarea + '|' + t.Rol)) {
             let subtasksState = [];
             if (t.Subtareas && t.Subtareas.trim() !== "") {
                 subtasksState = t.Subtareas.split(";").map(subName => ({
@@ -921,8 +922,9 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
     const myTasks = [];
     const seenMyTasks = new Set();
     myTasksRaw.forEach(t => {
-        if (!seenMyTasks.has(t.task_name)) {
-            seenMyTasks.add(t.task_name);
+        const key = t.task_name + '|' + t.role_name;
+        if (!seenMyTasks.has(key)) {
+            seenMyTasks.add(key);
             myTasks.push(t);
         }
     });
@@ -1120,10 +1122,10 @@ function toggleMainTask(taskId, isCollab) {
 
     const newCompletedState = !taskObj.completed;
     
-    // Find all duplicates of this task for the same date (e.g. mixed roles)
-    const duplicates = dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name);
+    // Find all matching instances of this task for the same date and role
+    const matches = dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name && d.role_name === taskObj.role_name);
     
-    duplicates.forEach(task => {
+    matches.forEach(task => {
         task.completed = newCompletedState;
         if (task.completed) {
             task.completed_by_employee_id = currentUser.id;
@@ -1145,7 +1147,7 @@ function toggleMainTask(taskId, isCollab) {
     if (newCompletedState) showNotification("✓ Tarea completada!");
 
     saveLocalDatabase();
-    pushToCloudTable('roods_daily_tasks', duplicates);
+    pushToCloudTable('roods_daily_tasks', matches);
 
     // Refresh UI
     const today = new Date();
@@ -1158,9 +1160,9 @@ function toggleSubtask(taskId, subIdx, isChecked, isCollab) {
     const taskObj = dailyTasks.find(d => d.id === taskId);
     if (!taskObj) return;
 
-    const duplicates = dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name);
+    const matches = dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name && d.role_name === taskObj.role_name);
 
-    duplicates.forEach(task => {
+    matches.forEach(task => {
         if (!task.subtasks_state || !task.subtasks_state[subIdx]) return;
         task.subtasks_state[subIdx].completed = isChecked;
 
@@ -1179,7 +1181,7 @@ function toggleSubtask(taskId, subIdx, isChecked, isCollab) {
     });
 
     saveLocalDatabase();
-    pushToCloudTable('roods_daily_tasks', duplicates);
+    pushToCloudTable('roods_daily_tasks', matches);
 
     // Refresh UI
     const today = new Date();
