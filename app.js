@@ -97,7 +97,7 @@ const DEFAULT_EMPLOYEES = [
 ];
 
 // Default tasks if CSV is empty
-const DEFAULT_TASKS_CSV = `Tarea,Rol,Dias,Imprescindible,Subtareas
+const DEFAULT_TASKS_CSV = `Tarea,Rol,Turno,Dias,Imprescindible,Subtareas
 Contar fondo de caja inicial (apertura),Cajera,Todos,Si,
 Limpieza de barra de atención y mesas de clientes,Cajera,Todos,No,
 Recibir y acomodar pan fresco del día,Cajera,Todos,No,Croissants;Conchas;Mantecadas;Birotes;Donas
@@ -867,7 +867,7 @@ function generateDailyTasks(dateStr, schedule) {
             const instance = {
                 id: Date.now() + Math.random().toString(36).substr(2, 9),
                 date: dateStr,
-                shift: 'Ambos', // Always Ambos since Turno is removed
+                shift: t.Turno || 'Ambos',
                 task_name: t.Tarea,
                 role_name: t.Rol,
                 completed: false,
@@ -2152,13 +2152,14 @@ function renderAdminCsvView() {
     filteredTemplates.forEach(t => {
         const tr = document.createElement('tr');
         const impVal = t.Imprescindible || "No";
+        const turnoVal = t.Turno || "Ambos";
         const subsList = t.Subtareas ? t.Subtareas.split(';').map(s => s.trim()).filter(s => s) : [];
         const subsText = subsList.length > 0 ? `${subsList.length} subtarea(s)` : "Ninguna";
         
         tr.innerHTML = `
             <td class="bold-label">${t.Tarea}</td>
             <td><span class="badge" style="background-color: #673ab7; font-weight:700; margin:0;">${t.Rol}</span></td>
-            
+            <td><span class="badge" style="background-color: #009688; font-weight:700; margin:0;">${turnoVal}</span></td>
             <td>${t.Dias}</td>
             <td><span style="font-weight:600; color: ${impVal === 'Si' ? '#e91e63' : '#666'}">${impVal}</span></td>
             <td><span style="font-size:0.85rem; color: #555;">${subsText}</span></td>
@@ -2206,6 +2207,8 @@ function openTaskTemplateModal(id = null) {
         document.getElementById('editTaskTemplateId').value = t.id;
         document.getElementById('templateTaskName').value = t.Tarea;
         document.getElementById('templateRole').value = t.Rol;
+        const shiftSelect = document.getElementById('templateShift');
+        if (shiftSelect) shiftSelect.value = t.Turno || "Ambos";
         
         
         // Days resolution
@@ -2228,6 +2231,8 @@ function openTaskTemplateModal(id = null) {
         // Add mode
         title.textContent = "Agregar Nueva Tarea";
         document.getElementById('editTaskTemplateId').value = "";
+        const shiftSelect = document.getElementById('templateShift');
+        if (shiftSelect) shiftSelect.value = "Ambos";
     }
     
     modal.classList.remove('hidden');
@@ -2278,7 +2283,8 @@ async function submitTaskTemplateForm(event) {
     const id = document.getElementById('editTaskTemplateId').value;
     const tarea = document.getElementById('templateTaskName').value.trim();
     const rol = document.getElementById('templateRole').value;
-    
+    const shiftElem = document.getElementById('templateShift');
+    const turno = shiftElem ? shiftElem.value : "Ambos";
     
     const daysSelect = document.getElementById('templateDaysSelect').value;
     const customDays = document.getElementById('templateCustomDays').value.trim();
@@ -2299,7 +2305,7 @@ async function submitTaskTemplateForm(event) {
             
             t.Tarea = tarea;
             t.Rol = rol;
-            
+            t.Turno = turno;
             t.Dias = dias;
             t.Imprescindible = imprescindible;
             t.Subtareas = subtareas;
@@ -2312,7 +2318,7 @@ async function submitTaskTemplateForm(event) {
                     const dbObject = {
                         "Tarea": tarea,
                         "Rol": rol,
-                        "Turno": "N/A",
+                        "Turno": turno,
                         "Dias": dias,
                         "Imprescindible": imprescindible,
                         "Subtareas": subtareas
@@ -2345,7 +2351,7 @@ async function submitTaskTemplateForm(event) {
             id: Date.now(),
             Tarea: tarea,
             Rol: rol,
-            
+            Turno: turno,
             Dias: dias,
             Imprescindible: imprescindible,
             Subtareas: subtareas
@@ -2360,7 +2366,7 @@ async function submitTaskTemplateForm(event) {
                 const dbObject = {
                     "Tarea": tarea,
                     "Rol": rol,
-                    "Turno": "N/A",
+                    "Turno": turno,
                     "Dias": dias,
                     "Imprescindible": imprescindible,
                     "Subtareas": subtareas
@@ -2395,18 +2401,19 @@ async function submitTaskTemplateForm(event) {
 }
 
 function downloadTemplateCsv() {
-    let csvContent = "Tarea,Rol,Dias,Imprescindible,Subtareas\n";
+    let csvContent = "Tarea,Rol,Turno,Dias,Imprescindible,Subtareas\n";
     
     if (taskTemplates.length > 0) {
         taskTemplates.forEach(t => {
             const escapedTask = t.Tarea.replace(/"/g, '""');
+            const turnoVal = t.Turno || "Ambos";
             const impVal = t.Imprescindible || "No";
             const subsVal = t.Subtareas || "";
             const escapedSubs = subsVal.replace(/"/g, '""');
-            csvContent += `"${escapedTask}",${t.Rol},${t.Dias},${impVal},"${escapedSubs}"\n`;
+            csvContent += `"${escapedTask}",${t.Rol},${turnoVal},${t.Dias},${impVal},"${escapedSubs}"\n`;
         });
     } else {
-        csvContent += DEFAULT_TASKS_CSV.replace("Tarea,Rol,Dias,Imprescindible,Subtareas\n", "");
+        csvContent += DEFAULT_TASKS_CSV.replace("Tarea,Rol,Turno,Dias,Imprescindible,Subtareas\n", "");
     }
 
     try {
@@ -2450,7 +2457,7 @@ function importCsv(event) {
                         return {
                             "Tarea": t.Tarea,
                             "Rol": t.Rol,
-                            "Turno": "N/A",
+                            "Turno": t.Turno || "Ambos",
                             "Dias": t.Dias,
                             "Imprescindible": t.Imprescindible || "No",
                             "Subtareas": t.Subtareas || ""
@@ -2474,7 +2481,7 @@ function importCsv(event) {
             renderAdminCsvView();
             showNotification("📤 Archivo CSV importado con éxito.");
         } else {
-            alert("Error al procesar el archivo CSV. Asegúrate de tener los encabezados correctos: Tarea, Rol, Dias");
+            alert("Error al procesar el archivo CSV. Asegúrate de tener los encabezados correctos: Tarea, Rol, Turno, Dias");
         }
     };
     reader.readAsText(file);
@@ -2514,7 +2521,7 @@ function parseTasksCsv(csvText) {
         const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
         const taskIdx = headers.indexOf("tarea");
         const roleIdx = headers.indexOf("rol");
-        
+        const turnoIdx = headers.indexOf("turno");
         const daysIdx = headers.indexOf("dias");
         const impIdx = headers.indexOf("imprescindible");
         const subsIdx = headers.indexOf("subtareas");
@@ -2530,12 +2537,13 @@ function parseTasksCsv(csvText) {
             const parts = parseCsvLineHelper(line);
             
             if (parts.length > 0 && parts[taskIdx]) {
+                const turnoVal = (turnoIdx !== -1 && parts[turnoIdx]) ? parts[turnoIdx].trim() : "Ambos";
                 const impVal = (impIdx !== -1 && parts[impIdx]) ? parts[impIdx].trim() : "No";
                 const subsVal = (subsIdx !== -1 && parts[subsIdx]) ? parts[subsIdx].trim() : "";
                 templates.push({
                     Tarea: parts[taskIdx].trim(),
                     Rol: parts[roleIdx].trim(),
-                    Turno: 'N/A',
+                    Turno: turnoVal || "Ambos",
                     Dias: parts[daysIdx].trim(),
                     Imprescindible: impVal,
                     Subtareas: subsVal
