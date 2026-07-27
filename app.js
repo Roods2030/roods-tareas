@@ -703,9 +703,9 @@ function updateAttendanceUI(today, schedules) {
         container.classList.add('locked');
         const kiosk = isKioskDevice();
         if (kiosk) {
-            shiftsContainer.innerHTML += `<p class="attendance-message" style="margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary);">🔒 Por favor checa tu entrada en tu turno activo para desbloquear tus tareas de hoy.</p>`;
+            shiftsContainer.innerHTML += `<p class="attendance-message" style="margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary);">🔒 Por favor checa tu entrada en tu turno activo para desbloquear tus misiones de hoy.</p>`;
         } else {
-            shiftsContainer.innerHTML += `<p class="attendance-message" style="margin-top: 10px; font-size: 0.85rem; color: #c62828; font-weight: 600;">📱 Por favor checa tu entrada en la Tablet de Caja para desbloquear tus tareas de hoy.</p>`;
+            shiftsContainer.innerHTML += `<p class="attendance-message" style="margin-top: 10px; font-size: 0.85rem; color: #c62828; font-weight: 600;">📱 Por favor checa tu entrada en la Tablet de Caja para desbloquear tus misiones de hoy.</p>`;
         }
     }
 }
@@ -973,7 +973,10 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
 
     // Render My Tasks
     if (myTasks.length === 0) {
-        myTasksList.innerHTML = `<div class="empty-state"><span class="empty-state-icon">🎉</span>No tienes tareas individuales activas hoy</div>`;
+        myTasksList.innerHTML = `<div class="empty-state">
+            <span class="empty-state-icon">🎉</span>
+            <p>No tienes misiones individuales activas hoy</p>
+        </div>`;
     } else {
         myTasks.forEach(task => {
             const item = createTaskItemElement(task, false);

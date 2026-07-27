@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ROODS - Tareas y Turnos</title>
+    <title>KRU | Gerencia Virtual</title>
     <!-- Global JavaScript Error Catcher -->
     <script>
         window.onerror = function(message, source, lineno, colno, error) {
@@ -60,10 +60,10 @@
         <!-- HEADER -->
         <header class="main-header">
             <div class="logo-container">
-                <img src="logo.jpg" alt="ROODS Estar al 100" class="logo-img">
+                <img src="logo.jpg" alt="KRU Gerencia Virtual" class="logo-img">
                 <div class="logo-text-group">
-                    <span class="brand-name">ROODS</span>
-                    <span class="tagline">Tareas & Turnos</span>
+                    <span class="brand-name">KRU</span>
+                    <span class="tagline">Gerencia Virtual</span>
                 </div>
             </div>
             <div id="syncIndicator" class="sync-indicator">Sincronizado Local</div>
@@ -73,7 +73,7 @@
         <section id="loginSection" class="section active">
             <div class="card glass login-card">
                 <h2>Ingreso de Personal</h2>
-                <p class="subtitle">Introduce tu PIN para acceder a tus tareas del día</p>
+                <p class="subtitle">Introduce tu PIN para acceder a tus misiones del día</p>
                 
                 <div class="pin-display">
                     <div class="pin-dot" id="dot1"></div>
@@ -142,25 +142,25 @@
                     <div class="lock-overlay" id="lockOverlay">
                         <div class="lock-content">
                             <span class="lock-icon">🔒</span>
-                            <p>Checa tu entrada para desbloquear tus tareas de hoy</p>
+                            <p>Checa tu entrada para desbloquear tus misiones de hoy</p>
                         </div>
                     </div>
 
-                    <!-- Progress Summary -->
-                    <div class="progress-summary">
-                        <div class="progress-text-container">
-                            <span class="progress-title">Progreso de Tareas</span>
-                            <span class="progress-percent" id="tasksPercentText">0%</span>
+                    <!-- Progress Bar -->
+                    <div class="progress-section">
+                        <div class="progress-info">
+                            <span class="progress-title">Progreso de Misiones</span>
+                            <span class="progress-percentage" id="tasksProgressPercentage">0%</span>
                         </div>
                         <div class="progress-bar-bg">
-                            <div class="progress-bar-fill" id="tasksProgressBar" style="width: 0%;"></div>
+                            <div class="progress-bar-fill" id="tasksProgressBar"></div>
                         </div>
                     </div>
 
-                    <!-- Task Tabs -->
-                    <div class="tab-navigation employee-tabs">
-                        <button class="tab-btn active" id="tabMisTareas" onclick="switchTaskTab('mis-tareas')">Mis Tareas</button>
-                        <button class="tab-btn" id="tabColaborativas" onclick="switchTaskTab('colaborativas')">Tareas Turno</button>
+                    <!-- Task Sub-Tabs -->
+                    <div class="tab-navigation sub-nav employee-tabs" style="margin-top: 15px;">
+                        <button class="tab-btn active" id="tabMisTareas" onclick="switchTaskTab('mis-tareas')">Mis Misiones</button>
+                        <button class="tab-btn" id="tabColaborativas" onclick="switchTaskTab('colaborativas')">Misiones Turno</button>
                         <button class="tab-btn" id="tabMensajes" onclick="switchTaskTab('mensajes')">Mensajes <span class="badge-dot hidden" id="mensajesBadgeDot"></span></button>
                         <button class="tab-btn" id="tabMuroAvisos" onclick="switchTaskTab('muro-avisos')">Muro Avisos 💬 <span class="badge-dot hidden" id="muroBadgeDot"></span></button>
                     </div>
@@ -212,7 +212,7 @@
                         <img src="kru_avatar.jpg" alt="KRU Avatar" style="width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary-gradient-start); box-shadow: 0 3px 10px rgba(0,0,0,0.15);">
                         <div>
                             <h2 style="margin: 0; font-size: 1.3rem; color: var(--text-primary);">KRU</h2>
-                            <span style="font-size: 0.78rem; font-weight: 700; color: var(--primary-gradient-start); background: #FCE4EC; padding: 2px 9px; border-radius: 10px; display: inline-block; margin-top: 2px;">Gerencia Virtual</span>
+                            <span style="font-size: 0.78rem; font-weight: 700; color: var(--primary-gradient-start); background: #FCE4EC; padding: 2px 9px; border-radius: 10px; display: inline-block; margin-top: 2px;">Gestión de Misiones</span>
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -227,7 +227,7 @@
                     <button class="tab-btn" id="tabHistorial" onclick="switchAdminTab('historial')">Historial 📆</button>
                     <button class="tab-btn" id="tabAsistencia" onclick="switchAdminTab('asistencia')">Asistencia</button>
                     <button class="tab-btn" id="tabRoles" onclick="switchAdminTab('roles')">Roles Semanales</button>
-                    <button class="tab-btn" id="tabTareasCsv" onclick="switchAdminTab('tareas-csv')">Tareas CSV</button>
+                    <button class="tab-btn" id="tabTareasCsv" onclick="switchAdminTab('tareas-csv')">Misiones CSV</button>
                     <button class="tab-btn" id="tabEmpleados" onclick="switchAdminTab('empleados')">Empleados</button>
                     <button class="tab-btn" id="tabComunicados" onclick="switchAdminTab('comunicados')">Comunicados 📢</button>
                     <button class="tab-btn" id="tabMuroAvisosAdmin" onclick="switchAdminTab('muro-avisos-admin')">Muro de Avisos 💬 <span class="badge-dot hidden" id="adminMuroBadgeDot"></span></button>
@@ -244,11 +244,11 @@
                         </div>
                         
                         <!-- WIDGET: TAREAS DE MAÑANA -->
-                        <div class="card glass" style="padding: 20px; border-radius: var(--border-radius-medium); border: 1px solid rgba(255,255,255,0.2); background: rgba(255, 255, 255, 0.45);">
-                            <h4 style="margin-bottom: 5px; color: #1976d2; display: flex; align-items: center; gap: 8px; font-size: 1.1rem; font-weight: 800;">
-                                <span>📅</span> Tareas para Mañana
-                            </h4>
-                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Programa tareas espontáneas que aparecerán mañana.</p>
+                        <div class="tomorrow-tasks-widget glass" style="margin-bottom: 20px; padding: 15px; border-radius: 12px; background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(255, 255, 255, 0.4);">
+                            <h3 style="margin-bottom: 5px; font-size: 0.95rem; color: var(--primary-gradient-start); display: flex; align-items: center; gap: 6px;">
+                                <span>📅</span> Misiones para Mañana
+                            </h3>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Programa misiones espontáneas que aparecerán mañana.</p>
                             
                             <form id="tomorrowTaskForm" onsubmit="sendTomorrowTask(event)">
                                 <div class="form-group" style="margin-bottom: 12px;">
@@ -286,8 +286,8 @@
                 
                 <!-- ADMIN TAB CONTENT: HISTORIAL -->
                 <div class="tab-content admin-content" id="adminContentHistorial">
-                    <h3>Historial Operativo de Tareas</h3>
-                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Selecciona una fecha anterior para revisar qué tareas se completaron y cuáles no.</p>
+                    <h3>Historial Operativo de Misiones</h3>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Selecciona una fecha anterior para revisar qué misiones se completaron y cuáles no.</p>
                     
                     <div class="form-group" style="max-width: 300px; margin-bottom: 20px;">
                         <label for="historialDate">Fecha:</label>
@@ -346,7 +346,6 @@
                     </div>
                 </div>
 
-                <!-- ADMIN TAB CONTENT: ASISTENCIA -->
                 <!-- ADMIN TAB CONTENT: ASISTENCIA -->
                 <div class="tab-content admin-content" id="adminContentAsistencia">
                     <div class="flex-header">
@@ -446,11 +445,11 @@
 
                 <!-- ADMIN TAB CONTENT: TAREAS CSV -->
                 <div class="tab-content admin-content" id="adminContentTareasCsv">
-                    <div class="flex-header">
-                        <h3>Gestión y Editor de Tareas Base</h3>
-                        <button class="btn-primary" onclick="openTaskTemplateModal()">Agregar Nueva Tarea ➕</button>
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
+                        <h3>Gestión y Editor de Misiones Base</h3>
+                        <button class="btn-primary" onclick="openTaskTemplateModal()">Agregar Nueva Misión ➕</button>
                     </div>
-                    <p class="description">Administra las tareas base directamente en la tabla o expórtalas/impórtalas en formato CSV si prefieres hojas de cálculo.</p>
+                    <p class="description">Administra las misiones base directamente en la tabla o expórtalas/impórtalas en formato CSV si prefieres hojas de cálculo.</p>
                     
                     <div class="csv-actions-box" style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                         <div class="form-group" style="margin: 0; min-width: 150px;">
@@ -687,7 +686,7 @@
     <!-- Supabase SDK (loaded locally to prevent CDN/blockage issues) -->
     <script src="supabase.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.0.35"></script>
+    <script src="app.js?v=1.0.36"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
