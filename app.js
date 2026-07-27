@@ -1215,17 +1215,20 @@ function toggleSubtask(taskId, subIdx, isChecked, isCollab) {
 }
 
 function updateTaskProgress(myTasks) {
+    const percentEl = document.getElementById('tasksProgressPercentage') || document.getElementById('tasksPercentText');
+    const barEl = document.getElementById('tasksProgressBar');
+    
     const total = myTasks.length;
     if (total === 0) {
-        document.getElementById('tasksPercentText').textContent = "100%";
-        document.getElementById('tasksProgressBar').style.width = "100%";
+        if (percentEl) percentEl.textContent = "100%";
+        if (barEl) barEl.style.width = "100%";
         return;
     }
     const completed = myTasks.filter(t => t.completed).length;
     const percent = Math.round((completed / total) * 100);
 
-    document.getElementById('tasksPercentText').textContent = `${percent}%`;
-    document.getElementById('tasksProgressBar').style.width = `${percent}%`;
+    if (percentEl) percentEl.textContent = `${percent}%`;
+    if (barEl) barEl.style.width = `${percent}%`;
 }
 
 function switchTaskTab(tabId) {
