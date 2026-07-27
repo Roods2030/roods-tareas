@@ -447,6 +447,7 @@ function login() {
     } else {
         showSection('employeeSection');
         initEmployeeView();
+        showKruWelcomeModal();
     }
     showNotification(`🔓 Bienvenido, ${currentUser.name}`);
 }
@@ -750,6 +751,7 @@ function performCheckIn(roleKey) {
 
     showNotification(`📥 Entrada registrada para ${roleInfo.name}.`);
     initEmployeeView();
+    showKruWelcomeModal();
 }
 
 function performCheckOut(roleKey) {
@@ -1361,6 +1363,22 @@ async function markPrivateMessagesAsRead() {
 
 function acknowledgeGlobalAnnounce() {
     document.getElementById('globalAnnounceModal').classList.add('hidden');
+}
+
+function showKruWelcomeModal() {
+    const modal = document.getElementById('kruWelcomeModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+    }
+}
+
+function dismissKruWelcomeModal() {
+    const modal = document.getElementById('kruWelcomeModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
 }
 
 
