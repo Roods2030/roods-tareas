@@ -1,4 +1,4 @@
-const CACHE_NAME = 'roods-tareas-pwa-v34';
+const CACHE_NAME = 'roods-tareas-pwa-v35';
 
 // Install event - skip waiting to ensure service worker activates immediately
 self.addEventListener('install', (event) => {

@@ -908,15 +908,20 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
     myTasksList.innerHTML = "";
     collabTasksList.innerHTML = "";
 
+    // Helper function for shift matching (allows N/A, Ambos, Todos, or matching shift)
+    const isShiftMatch = (taskShift, activeShifts) => {
+        if (!taskShift || taskShift === 'Ambos' || taskShift === 'Todos' || taskShift === 'N/A' || taskShift.trim() === '') return true;
+        if (activeShifts.includes(taskShift)) return true;
+        if (taskShift.toLowerCase() === 'apertura' && activeShifts.includes('Matutino')) return true;
+        if (taskShift.toLowerCase() === 'cierre' && activeShifts.includes('Vespertino')) return true;
+        return false;
+    };
+
     // Filter today's tasks for active shifts
     const activeShifts = [...new Set(schedules.map(s => s.shift))];
     const todayTasks = dailyTasks.filter(d => {
         if (d.date !== dateStr) return false;
-        if (d.shift === 'Ambos' || d.shift === 'Todos') return true;
-        if (activeShifts.includes(d.shift)) return true;
-        if (d.shift.toLowerCase() === 'apertura' && activeShifts.includes('Matutino')) return true;
-        if (d.shift.toLowerCase() === 'cierre' && activeShifts.includes('Vespertino')) return true;
-        return false;
+        return isShiftMatch(d.shift, activeShifts);
     });
 
     // Strict role matching function (ignores case and spaces to be safe)
@@ -1457,7 +1462,9 @@ function renderAdminMonitoreo() {
             // Calculate progress of daily tasks for this role
             const activeRoles = [...sched.roles, sched.roleName, sched.roleKey];
             const empTasksRaw = dailyTasks.filter(d => 
-                d.date === todayStr && isRoleMatchLocal(d.role_name, activeRoles)
+                d.date === todayStr && 
+                isShiftMatch(d.shift, [sched.shift]) && 
+                isRoleMatchLocal(d.role_name, activeRoles)
             );
             
             const empTasks = [];
