@@ -13,21 +13,21 @@ const ROODS_ROLES = {
         name: 'Cajero - Barista',
         shift: 'Matutino',
         hours: '9:30 - 17:30',
-        taskRoles: ['Cajero - Barista']
+        taskRoles: ['Cajero - Barista', 'Cajero', 'Barista', 'Cajera']
     },
     'matutinoCocinaBarista': {
         key: 'matutinoCocinaBarista',
         name: 'Cocina - Barista',
         shift: 'Matutino',
         hours: '9:30 - 17:30',
-        taskRoles: ['Cocina - Barista']
+        taskRoles: ['Cocina - Barista', 'Cocina', 'Barista']
     },
     'vespertinoCajero': {
         key: 'vespertinoCajero',
         name: 'Cajero',
         shift: 'Vespertino',
         hours: '17:00 - 22:30',
-        taskRoles: ['Cajera']
+        taskRoles: ['Cajero', 'Cajera']
     },
     'vespertinoBarista': {
         key: 'vespertinoBarista',
@@ -48,21 +48,21 @@ const ROODS_ROLES = {
         name: 'Aux. Administrativo',
         shift: 'Matutino',
         hours: '14:30 - 17:00',
-        taskRoles: ['Apoyo']
+        taskRoles: ['Aux. Administrativo', 'Apoyo']
     },
     'apoyoCocina': {
         key: 'apoyoCocina',
         name: 'Apoyo Cocina',
         shift: 'Matutino',
         hours: '14:30 - 17:00',
-        taskRoles: ['Apoyo Cocina']
+        taskRoles: ['Apoyo Cocina', 'Cocina']
     },
     'apoyoGeneral': {
         key: 'apoyoGeneral',
         name: 'Apoyo General',
         shift: 'Mixto',
         hours: '12:00 - 22:30',
-        taskRoles: ['Apoyo']
+        taskRoles: ['Apoyo General', 'Apoyo']
     }
 };
 
@@ -265,6 +265,16 @@ async function syncFromCloud() {
 
         setSyncIndicator("Nube Sincronizada", "");
         console.log("Supabase sync successful!");
+
+        // Refresh UI with synced data
+        if (currentUser) {
+            if (currentUser.is_admin) {
+                if (currentAdminTab === 'monitoreo') renderAdminMonitoreo();
+                if (currentAdminTab === 'asistencia') renderAdminAttendance();
+            } else {
+                initEmployeeView();
+            }
+        }
     } catch (e) {
         console.error("Cloud Sync Failed, falling back to LocalStorage:", e);
         setSyncIndicator("Offline (Local)", "");
@@ -1412,6 +1422,15 @@ function renderAdminMonitoreo() {
     // Determine active shifts today based on attendance or schedule
     const todayEntries = attendanceLogs.filter(l => l.date === todayStr);
     let hasScheduled = false;
+
+    // Ensure daily tasks exist for all scheduled employees today
+    employees.forEach(emp => {
+        if (emp.is_admin) return;
+        const empSchedules = resolveTodaySchedules(emp.id, today);
+        empSchedules.forEach(sched => {
+            generateDailyTasks(todayStr, sched);
+        });
+    });
 
     // Check individual tasks progress for each active employee schedule
     employees.forEach(emp => {
@@ -3213,6 +3232,40 @@ function subscribeToMuroMessages() {
         .subscribe();
 }
 
+function subscribeToAttendance() {
+    if (!supabaseClient) return;
+    
+    supabaseClient
+        .channel('all-attendance')
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'roods_attendance' },
+            (payload) => {
+                if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                    const newLog = payload.new;
+                    if (!newLog) return;
+                    if (!attendanceLogs.some(a => a.id === newLog.id)) {
+                        attendanceLogs.push(newLog);
+                    } else {
+                        const idx = attendanceLogs.findIndex(a => a.id === newLog.id);
+                        if (idx > -1) attendanceLogs[idx] = newLog;
+                    }
+                    saveLocalDatabase();
+                    
+                    if (currentUser) {
+                        if (currentUser.is_admin) {
+                            if (currentAdminTab === 'monitoreo') renderAdminMonitoreo();
+                            if (currentAdminTab === 'asistencia') renderAdminAttendance();
+                        } else {
+                            initEmployeeView();
+                        }
+                    }
+                }
+            }
+        )
+        .subscribe();
+}
+
 // --- APP STARTUP ---
 function initApp() {
     loadLocalDatabase();
@@ -3227,6 +3280,7 @@ function initApp() {
             syncFromCloud();
             subscribeToAllDailyTasks();
             subscribeToMuroMessages();
+            subscribeToAttendance();
         } else {
             console.warn("Supabase SDK not loaded. Running in local/offline mode.");
             setSyncIndicator("Offline (Local)", "");
