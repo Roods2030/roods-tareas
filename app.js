@@ -13,21 +13,21 @@ const ROODS_ROLES = {
         name: 'Cajero - Barista',
         shift: 'Matutino',
         hours: '9:30 - 17:30',
-        taskRoles: ['Cajero - Barista', 'Cajero', 'Barista', 'Cajera']
+        taskRoles: ['Cajero - Barista']
     },
     'matutinoCocinaBarista': {
         key: 'matutinoCocinaBarista',
         name: 'Cocina - Barista',
         shift: 'Matutino',
         hours: '9:30 - 17:30',
-        taskRoles: ['Cocina - Barista', 'Cocina', 'Barista']
+        taskRoles: ['Cocina - Barista']
     },
     'vespertinoCajero': {
         key: 'vespertinoCajero',
         name: 'Cajero',
         shift: 'Vespertino',
         hours: '17:00 - 22:30',
-        taskRoles: ['Cajero', 'Cajera']
+        taskRoles: ['Cajero']
     },
     'vespertinoBarista': {
         key: 'vespertinoBarista',
@@ -48,14 +48,14 @@ const ROODS_ROLES = {
         name: 'Aux. Administrativo',
         shift: 'Matutino',
         hours: '14:30 - 17:00',
-        taskRoles: ['Aux. Administrativo', 'Apoyo']
+        taskRoles: ['Aux. Administrativo']
     },
     'apoyoCocina': {
         key: 'apoyoCocina',
         name: 'Apoyo Cocina',
         shift: 'Matutino',
         hours: '14:30 - 17:00',
-        taskRoles: ['Apoyo Cocina', 'Cocina']
+        taskRoles: ['Apoyo Cocina']
     },
     'apoyoGeneral': {
         key: 'apoyoGeneral',
