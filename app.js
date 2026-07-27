@@ -899,6 +899,22 @@ function generateDailyTasks(dateStr, schedule) {
     }
 }
 
+// --- Role and Shift Matching Helper Functions ---
+function isShiftMatch(taskShift, activeShifts) {
+    if (!taskShift || taskShift === 'Ambos' || taskShift === 'Todos' || taskShift === 'N/A' || taskShift.trim() === '') return true;
+    if (activeShifts.includes(taskShift)) return true;
+    if (taskShift.toLowerCase() === 'apertura' && activeShifts.includes('Matutino')) return true;
+    if (taskShift.toLowerCase() === 'cierre' && activeShifts.includes('Vespertino')) return true;
+    return false;
+}
+
+function isRoleMatch(taskRole, activeRoles) {
+    if (!taskRole) return false;
+    if (taskRole.toLowerCase().trim() === 'todos') return true;
+    const normalizedTaskRole = taskRole.toLowerCase().replace(/\s+/g, '');
+    return activeRoles.some(ar => ar && ar.toLowerCase().replace(/\s+/g, '') === normalizedTaskRole);
+}
+
 function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
     const myTasksList = document.getElementById('myTasksList');
     const collabTasksList = document.getElementById('collabTasksList');
@@ -908,29 +924,12 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
     myTasksList.innerHTML = "";
     collabTasksList.innerHTML = "";
 
-    // Helper function for shift matching (allows N/A, Ambos, Todos, or matching shift)
-    const isShiftMatch = (taskShift, activeShifts) => {
-        if (!taskShift || taskShift === 'Ambos' || taskShift === 'Todos' || taskShift === 'N/A' || taskShift.trim() === '') return true;
-        if (activeShifts.includes(taskShift)) return true;
-        if (taskShift.toLowerCase() === 'apertura' && activeShifts.includes('Matutino')) return true;
-        if (taskShift.toLowerCase() === 'cierre' && activeShifts.includes('Vespertino')) return true;
-        return false;
-    };
-
     // Filter today's tasks for active shifts
     const activeShifts = [...new Set(schedules.map(s => s.shift))];
     const todayTasks = dailyTasks.filter(d => {
         if (d.date !== dateStr) return false;
         return isShiftMatch(d.shift, activeShifts);
     });
-
-    // Strict role matching function (ignores case and spaces to be safe)
-    const isRoleMatch = (taskRole, activeRoles) => {
-        if (taskRole.toLowerCase().trim() === 'todos') return true;
-        
-        const normalizedTaskRole = taskRole.toLowerCase().replace(/\s+/g, '');
-        return activeRoles.some(ar => ar.toLowerCase().replace(/\s+/g, '') === normalizedTaskRole);
-    };
 
     // Individual tasks matching user's active roles
     const myTasksRaw = todayTasks.filter(t => isRoleMatch(t.role_name, activeRolesList));
@@ -1412,11 +1411,7 @@ function renderAdminMonitoreo() {
     const today = new Date();
     const todayStr = formatDateString(today);
 
-    const isRoleMatchLocal = (taskRole, activeRoles) => {
-        if (taskRole.toLowerCase().trim() === 'todos') return true;
-        const normalizedTaskRole = taskRole.toLowerCase().replace(/\s+/g, '');
-        return activeRoles.some(ar => ar.toLowerCase().replace(/\s+/g, '') === normalizedTaskRole);
-    };
+
 
     // Tuesday Rest Day Check
     if (today.getDay() === 2) {
@@ -1464,7 +1459,7 @@ function renderAdminMonitoreo() {
             const empTasksRaw = dailyTasks.filter(d => 
                 d.date === todayStr && 
                 isShiftMatch(d.shift, [sched.shift]) && 
-                isRoleMatchLocal(d.role_name, activeRoles)
+                isRoleMatch(d.role_name, activeRoles)
             );
             
             const empTasks = [];
