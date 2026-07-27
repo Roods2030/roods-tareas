@@ -207,8 +207,14 @@
         <!-- SECTION: HR ADMIN CONSOLE -->
         <section id="adminSection" class="section">
             <div class="card glass admin-card">
-                <div class="admin-header">
-                    <h2>Consola de Administración RH</h2>
+                <div class="admin-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <img src="kru_avatar.jpg" alt="KRU Avatar" style="width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary-gradient-start); box-shadow: 0 3px 10px rgba(0,0,0,0.15);">
+                        <div>
+                            <h2 style="margin: 0; font-size: 1.3rem; color: var(--text-primary);">KRU</h2>
+                            <span style="font-size: 0.78rem; font-weight: 700; color: var(--primary-gradient-start); background: #FCE4EC; padding: 2px 9px; border-radius: 10px; display: inline-block; margin-top: 2px;">Gerencia Virtual</span>
+                        </div>
+                    </div>
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                         <button class="btn-small btn-outline" id="btnToggleKiosk" onclick="toggleKioskMode()" style="font-size:0.8rem; font-weight:bold; padding: 6px 12px; margin: 0; border-radius: 8px;">📱 Tablet de Caja: Desactivada ❌</button>
                         <button class="btn-back" onclick="logout()" style="margin: 0;">Cerrar Sesión 🚪</button>
@@ -657,9 +663,10 @@
     <!-- Global Announcement Modal -->
     <div id="globalAnnounceModal" class="modal hidden" style="z-index: 10000; align-items: center; justify-content: center; background: rgba(0,0,0,0.85);">
         <div class="modal-content glass" style="max-width: 400px; text-align: center; border: 2px solid #ff9800; background: rgba(255, 255, 255, 0.95); animation: pulse 1.5s infinite alternate;">
-            <div style="font-size: 3rem; margin-bottom: 10px;">🎈</div>
-            <h2 style="color: #ff9800; font-size: 1.5rem; margin-bottom: 15px;">¡Aviso Nuevo!</h2>
-            <p id="globalAnnounceTextDisplay" style="font-size: 1.1rem; color: #333; margin-bottom: 25px; line-height: 1.5;"></p>
+            <img src="kru_avatar.jpg" alt="KRU" style="width: 75px; height: 75px; border-radius: 50%; object-fit: cover; border: 3px solid #ff9800; box-shadow: 0 4px 12px rgba(0,0,0,0.2); margin-bottom: 8px;">
+            <h2 style="color: #ff9800; font-size: 1.3rem; margin: 0;">Mensaje de KRU</h2>
+            <span style="font-size: 0.8rem; color: #666; font-weight: 700; display: block; margin-bottom: 15px;">Gerencia Virtual</span>
+            <p id="globalAnnounceTextDisplay" style="font-size: 1.05rem; color: #333; margin-bottom: 25px; line-height: 1.5; font-weight: 500;"></p>
             <button class="btn-primary" onclick="acknowledgeGlobalAnnounce()" style="width: 100%; font-size: 1rem; padding: 12px; background: linear-gradient(135deg, #ff9800, #f44336); border: none; color: white; cursor: pointer; border-radius: 8px; font-weight: bold;">Entendido ✅</button>
         </div>
     </div>
@@ -667,7 +674,7 @@
     <!-- Supabase SDK (loaded locally to prevent CDN/blockage issues) -->
     <script src="supabase.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.0.32"></script>
+    <script src="app.js?v=1.0.33"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {

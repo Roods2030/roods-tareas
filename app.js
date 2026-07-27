@@ -93,7 +93,7 @@ const DEFAULT_EMPLOYEES = [
     { id: 3, name: "Pedro Alva", pin: "3333", is_admin: false },
     { id: 4, name: "Ana Ruiz", pin: "4444", is_admin: false },
     { id: 5, name: "Luis Delgado", pin: "5555", is_admin: false },
-    { id: 99, name: "RH / Administrador", pin: "231217", is_admin: true }
+    { id: 99, name: "KRU (Gerencia Virtual)", nickname: "KRU", photo: "kru_avatar.jpg", pin: "231217", is_admin: true }
 ];
 
 // Default tasks if CSV is empty
@@ -214,7 +214,12 @@ async function syncFromCloud() {
         const { data: dbEmp, error: errEmp } = await supabaseClient.from('roods_employees').select('*');
         if (errEmp) throw errEmp;
         if (dbEmp) {
-            employees = dbEmp;
+            employees = dbEmp.map(e => {
+                if (e.is_admin) {
+                    return { ...e, name: e.name || "KRU (Gerencia Virtual)", nickname: e.nickname || "KRU", photo: e.photo || "kru_avatar.jpg" };
+                }
+                return e;
+            });
             localStorage.setItem('roods_employees', JSON.stringify(employees));
         }
 
@@ -1321,11 +1326,16 @@ function renderPrivateMessages(messages) {
     
     let html = '';
     messages.forEach(m => {
+        const isAdminMsg = m.sender_name && (m.sender_name.includes('RH') || m.sender_name.includes('Administrador') || m.sender_name.includes('KRU') || m.sender_name.includes('Gerencia'));
+        const senderLabel = isAdminMsg ? 'KRU (Gerencia Virtual)' : m.sender_name;
+        const avatarHtml = isAdminMsg 
+            ? `<img src="kru_avatar.jpg" alt="KRU" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 1px solid #1976d2;">`
+            : '';
         const bg = m.read ? 'rgba(255,255,255,0.4)' : 'rgba(25, 118, 210, 0.1)';
         const border = m.read ? '1px solid #ddd' : '1px solid #1976d2';
         html += `<div style="background: ${bg}; border: ${border}; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <strong style="color: #1976d2;">De: ${m.sender_name}</strong>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <div>${avatarHtml}<strong style="color: #1976d2; vertical-align: middle;">De: ${senderLabel}</strong></div>
                 <span style="font-size: 0.75rem; color: #888;">${formatTimeString(m.created_at)}</span>
             </div>
             <div style="font-size: 0.9rem; color: #333; line-height: 1.4;">${m.message}</div>
@@ -3086,9 +3096,9 @@ function renderMuroMessages() {
     } else {
         muroMessages.forEach(msg => {
             const sender = employees.find(e => e.id === msg.employee_id || e.name === msg.employee_name);
-            const photoSrc = (sender && sender.photo) ? sender.photo : '';
-            const displayName = (sender && sender.nickname) ? sender.nickname : msg.employee_name;
-            const timeStr = formatTimeString(msg.timestamp);
+            const isAdminSender = (sender && sender.is_admin) || (msg.employee_name && (msg.employee_name.includes('RH') || msg.employee_name.includes('Administrador') || msg.employee_name.includes('KRU')));
+            const photoSrc = isAdminSender ? 'kru_avatar.jpg' : ((sender && sender.photo) ? sender.photo : '');
+            const displayName = isAdminSender ? 'KRU (Gerencia Virtual)' : ((sender && sender.nickname) ? sender.nickname : msg.employee_name);
 
             listHtml += `
                 <div class="muro-msg-item">
