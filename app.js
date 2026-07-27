@@ -447,7 +447,7 @@ function login() {
     } else {
         showSection('employeeSection');
         initEmployeeView();
-        showKruWelcomeModal();
+        showKruBannerModal('kru_welcome.png', '¡Comenzar Misión! 🚀');
     }
     showNotification(`🔓 Bienvenido, ${currentUser.name}`);
 }
@@ -733,6 +733,18 @@ function performCheckIn(roleKey) {
     const todayStr = formatDateString(today);
     const timeStr = today.toTimeString().split(' ')[0];
 
+    // Evaluate punctuality (4 minutes tolerance)
+    let isPunctual = true;
+    if (roleInfo.hours) {
+        const startTimeStr = roleInfo.hours.split('-')[0].trim();
+        const parts = startTimeStr.split(':').map(Number);
+        if (parts.length >= 2) {
+            const scheduledStartMins = parts[0] * 60 + parts[1];
+            const checkInMins = today.getHours() * 60 + today.getMinutes();
+            isPunctual = (checkInMins <= scheduledStartMins + 4);
+        }
+    }
+
     const log = {
         id: Date.now(),
         employee_id: currentUser.id,
@@ -751,7 +763,13 @@ function performCheckIn(roleKey) {
 
     showNotification(`📥 Entrada registrada para ${roleInfo.name}.`);
     initEmployeeView();
-    showKruWelcomeModal();
+
+    // Trigger punctuality image banner
+    if (isPunctual) {
+        showKruBannerModal('kru_punctual.png', '¡A Darlo Todo! 🚀');
+    } else {
+        showKruBannerModal('kru_late.png', '¡A Recuperarnos! 💪');
+    }
 }
 
 function performCheckOut(roleKey) {
@@ -836,6 +854,9 @@ function performCheckOut(roleKey) {
 
     showNotification(`📤 Salida registrada para ${roleInfo.name}. ¡Buen trabajo hoy!`);
     initEmployeeView();
+
+    // Trigger check-out image banner
+    showKruBannerModal('kru_checkout.png', '¡Buen Descanso! 🌙');
 }
 
 // --- Daily Task Generation and Rendering ---
@@ -1371,12 +1392,22 @@ function acknowledgeGlobalAnnounce() {
     document.getElementById('globalAnnounceModal').classList.add('hidden');
 }
 
-function showKruWelcomeModal() {
+function showKruBannerModal(imageSrc, buttonText) {
+    const imgEl = document.getElementById('kruWelcomeModalImg');
+    const btnEl = document.getElementById('kruWelcomeModalBtn');
     const modal = document.getElementById('kruWelcomeModal');
+    
+    if (imgEl) imgEl.src = imageSrc;
+    if (btnEl && buttonText) btnEl.textContent = buttonText;
+    
     if (modal) {
         modal.classList.remove('hidden');
         modal.style.display = 'flex';
     }
+}
+
+function showKruWelcomeModal() {
+    showKruBannerModal('kru_welcome.png', '¡Comenzar Misión! 🚀');
 }
 
 function dismissKruWelcomeModal() {
