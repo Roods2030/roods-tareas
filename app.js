@@ -865,12 +865,10 @@ function generateDailyTasks(dateStr, schedule) {
     const dayName = WEEKDAYS[today.getDay()];
     const isWeekend = (today.getDay() === 0 || today.getDay() === 6);
 
-    // Fetch all active templates for today and current shift
+    // Fetch active templates matching date, shift, and role
     const matchingTemplates = taskTemplates.filter(t => {
-        // Shift check - allow N/A since we removed the Turno column
         const shiftMatch = (!t.Turno || t.Turno === 'Ambos' || t.Turno === 'N/A' || t.Turno === schedule.shift);
         
-        // Day filter check
         let dayMatch = false;
         if (t.Dias === 'Todos') {
             dayMatch = true;
@@ -879,21 +877,25 @@ function generateDailyTasks(dateStr, schedule) {
         } else if (t.Dias === 'Fin de Semana') {
             dayMatch = isWeekend;
         } else {
-            // Specific day check (e.g. "Lunes", "Lunes, Miércoles")
             const parts = t.Dias.split(',').map(d => d.trim());
             dayMatch = parts.includes(dayName);
         }
 
-        return shiftMatch && dayMatch;
+        const roleMatch = (t.Rol === 'Colaborativa' || t.Rol === 'Todos' || isRoleMatch(t.Rol, [schedule.roleName, ...schedule.roles]));
+
+        return shiftMatch && dayMatch && roleMatch;
     });
 
-    // Check if daily tasks already exist for this date and role
     const existing = dailyTasks.filter(d => d.date === dateStr);
     const existingTaskKeys = new Set(existing.map(d => d.task_name + '|' + d.role_name));
     const newInstances = [];
 
     matchingTemplates.forEach(t => {
-        if (!existingTaskKeys.has(t.Tarea + '|' + t.Rol)) {
+        const targetRole = (t.Rol === 'Colaborativa') ? 'Colaborativa' : schedule.roleName;
+        const taskKey = t.Tarea + '|' + targetRole;
+
+        if (!existingTaskKeys.has(taskKey)) {
+            existingTaskKeys.add(taskKey);
             let subtasksState = [];
             if (t.Subtareas && t.Subtareas.trim() !== "") {
                 subtasksState = t.Subtareas.split(";").map(subName => ({
@@ -907,7 +909,7 @@ function generateDailyTasks(dateStr, schedule) {
                 date: dateStr,
                 shift: t.Turno || 'Ambos',
                 task_name: t.Tarea,
-                role_name: t.Rol,
+                role_name: targetRole,
                 completed: false,
                 completed_by_employee_id: null,
                 completed_by_name: null,
@@ -1507,16 +1509,17 @@ function renderAdminMonitoreo() {
         empSchedules.forEach(sched => {
             hasScheduled = true;
             
-            // Check check-in status for this specific role
+            // Check check-in/out status for this specific role (robust role matching)
             const userLogs = todayEntries.filter(l => l.employee_id === emp.id);
-            const checkIn = userLogs.find(l => l.role_name === sched.roleName && l.type === 'entrada');
-            const checkOut = userLogs.find(l => l.role_name === sched.roleName && l.type === 'salida');
+            const checkIn = userLogs.find(l => l.type === 'entrada' && (l.role_name === sched.roleName || isRoleMatch(l.role_name, [sched.roleName, ...sched.roles])));
+            const checkOut = userLogs.find(l => l.type === 'salida' && (l.role_name === sched.roleName || isRoleMatch(l.role_name, [sched.roleName, ...sched.roles]) || userLogs.some(x => x.type === 'salida')));
 
             let attendanceStatus = '<span class="text-orange">Pendiente de entrar</span>';
             if (checkIn && !checkOut) {
                 attendanceStatus = `<span class="text-green">Activo (Entrada: ${checkIn.time})</span>`;
             } else if (checkOut) {
-                attendanceStatus = `<span>Salió (${checkOut.time})</span>`;
+                const entryTimeStr = checkIn ? checkIn.time : (userLogs.find(l => l.type === 'entrada')?.time || '--');
+                attendanceStatus = `<span>Salió (Entrada: ${entryTimeStr} | Salida: ${checkOut.time})</span>`;
             }
 
             // Calculate progress of daily tasks for this role
@@ -1599,7 +1602,7 @@ function renderAdminMonitoreo() {
                 <p class="monitor-meta">Estatus: ${attendanceStatus}</p>
                 <div class="progress-summary" style="margin-top: 15px;">
                     <div class="progress-text-container">
-                        <span>Tareas (${completed}/${total})</span>
+                        <span>Misiones (${completed}/${total})</span>
                         <span>${percent}%</span>
                     </div>
                     <div class="progress-bar-bg">
