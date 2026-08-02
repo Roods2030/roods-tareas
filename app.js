@@ -929,7 +929,7 @@ function generateDailyTasks(dateStr, schedule) {
     }
 }
 
-// --- Role and Shift Matching Helper Functions ---
+// --- Role and Shift Matching & Deduplication Helper Functions ---
 function isShiftMatch(taskShift, activeShifts) {
     if (!taskShift || taskShift === 'Ambos' || taskShift === 'Todos' || taskShift === 'N/A' || taskShift.trim() === '') return true;
     if (activeShifts.includes(taskShift)) return true;
@@ -943,6 +943,35 @@ function isRoleMatch(taskRole, activeRoles) {
     if (taskRole.toLowerCase().trim() === 'todos') return true;
     const normalizedTaskRole = taskRole.toLowerCase().replace(/\s+/g, '');
     return activeRoles.some(ar => ar && ar.toLowerCase().replace(/\s+/g, '') === normalizedTaskRole);
+}
+
+function deduplicateTaskInstances(rawTasks) {
+    const map = new Map();
+    rawTasks.forEach(t => {
+        const key = t.task_name + '|' + (t.role_name === 'Colaborativa' ? 'Colaborativa' : t.role_name);
+        if (!map.has(key)) {
+            // Clone object
+            map.set(key, JSON.parse(JSON.stringify(t)));
+        } else {
+            const existing = map.get(key);
+            // If any instance is completed, preserve the completed state
+            if (t.completed && !existing.completed) {
+                existing.completed = true;
+                existing.completed_by_employee_id = t.completed_by_employee_id;
+                existing.completed_by_name = t.completed_by_name;
+                existing.completed_at = t.completed_at;
+            }
+            // Preserve subtasks completion
+            if (t.subtasks_state && existing.subtasks_state) {
+                t.subtasks_state.forEach((st, i) => {
+                    if (st.completed && existing.subtasks_state[i]) {
+                        existing.subtasks_state[i].completed = true;
+                    }
+                });
+            }
+        }
+    });
+    return Array.from(map.values());
 }
 
 function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
@@ -963,26 +992,11 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
 
     // Individual tasks matching user's active roles
     const myTasksRaw = todayTasks.filter(t => isRoleMatch(t.role_name, activeRolesList));
-    const myTasks = [];
-    const seenMyTasks = new Set();
-    myTasksRaw.forEach(t => {
-        const key = t.task_name + '|' + t.role_name;
-        if (!seenMyTasks.has(key)) {
-            seenMyTasks.add(key);
-            myTasks.push(t);
-        }
-    });
+    const myTasks = deduplicateTaskInstances(myTasksRaw);
     
     // Collaborative tasks
     const collabTasksRaw = todayTasks.filter(t => t.role_name === 'Colaborativa');
-    const collabTasks = [];
-    const seenCollabTasks = new Set();
-    collabTasksRaw.forEach(t => {
-        if (!seenCollabTasks.has(t.task_name)) {
-            seenCollabTasks.add(t.task_name);
-            collabTasks.push(t);
-        }
-    });
+    const collabTasks = deduplicateTaskInstances(collabTasksRaw);
 
     // Sort function based on original template order
     const templateOrderSort = (a, b) => {
@@ -1169,10 +1183,12 @@ function toggleMainTask(taskId, isCollab) {
 
     const newCompletedState = !taskObj.completed;
     
-    // Find matching instances: ONLY for collaborative tasks update shared instances, for individual tasks update strictly this task
-    const matches = (taskObj.role_name === 'Colaborativa' || isCollab)
-        ? dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name && d.role_name === 'Colaborativa')
-        : [taskObj];
+    // Find all matching instances for today with same task_name and role_name
+    const matches = dailyTasks.filter(d => 
+        d.date === taskObj.date && 
+        d.task_name === taskObj.task_name && 
+        (d.role_name === taskObj.role_name || (taskObj.role_name !== 'Colaborativa' && d.role_name !== 'Colaborativa'))
+    );
     
     matches.forEach(task => {
         task.completed = newCompletedState;
@@ -1193,7 +1209,7 @@ function toggleMainTask(taskId, isCollab) {
         }
     });
 
-    if (newCompletedState) showNotification("✓ Tarea completada!");
+    if (newCompletedState) showNotification("✓ Misión completada!");
 
     saveLocalDatabase();
     pushToCloudTable('roods_daily_tasks', matches);
@@ -1209,9 +1225,11 @@ function toggleSubtask(taskId, subIdx, isChecked, isCollab) {
     const taskObj = dailyTasks.find(d => d.id === taskId);
     if (!taskObj) return;
 
-    const matches = (taskObj.role_name === 'Colaborativa' || isCollab)
-        ? dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name && d.role_name === 'Colaborativa')
-        : [taskObj];
+    const matches = dailyTasks.filter(d => 
+        d.date === taskObj.date && 
+        d.task_name === taskObj.task_name && 
+        (d.role_name === taskObj.role_name || (taskObj.role_name !== 'Colaborativa' && d.role_name !== 'Colaborativa'))
+    );
 
     matches.forEach(task => {
         if (!task.subtasks_state || !task.subtasks_state[subIdx]) return;
@@ -1534,14 +1552,7 @@ function renderAdminMonitoreo() {
                 isRoleMatch(d.role_name, activeRoles)
             );
             
-            const empTasks = [];
-            const seenTasks = new Set();
-            empTasksRaw.forEach(t => {
-                if (!seenTasks.has(t.task_name)) {
-                    seenTasks.add(t.task_name);
-                    empTasks.push(t);
-                }
-            });
+            const empTasks = deduplicateTaskInstances(empTasksRaw);
             
             const total = empTasks.length;
             const completed = empTasks.filter(t => t.completed).length;
