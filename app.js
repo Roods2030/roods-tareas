@@ -1268,12 +1268,11 @@ function toggleMainTask(taskId, isCollab) {
 
     const newCompletedState = !taskObj.completed;
     
-    // Find all matching instances for today with same task_name and role_name
-    const matches = dailyTasks.filter(d => 
-        d.date === taskObj.date && 
-        d.task_name === taskObj.task_name && 
-        (d.role_name === taskObj.role_name || (taskObj.role_name !== 'Colaborativa' && d.role_name !== 'Colaborativa'))
-    );
+    // For collaborative tasks, sync across all collaborative instances for today.
+    // For individual tasks, target only this specific task instance (d.id === taskId).
+    const matches = (taskObj.role_name === 'Colaborativa' || isCollab)
+        ? dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name && d.role_name === 'Colaborativa')
+        : dailyTasks.filter(d => d.id === taskId);
     
     matches.forEach(task => {
         task.completed = newCompletedState;
@@ -1310,11 +1309,9 @@ function toggleSubtask(taskId, subIdx, isChecked, isCollab) {
     const taskObj = dailyTasks.find(d => d.id === taskId);
     if (!taskObj) return;
 
-    const matches = dailyTasks.filter(d => 
-        d.date === taskObj.date && 
-        d.task_name === taskObj.task_name && 
-        (d.role_name === taskObj.role_name || (taskObj.role_name !== 'Colaborativa' && d.role_name !== 'Colaborativa'))
-    );
+    const matches = (taskObj.role_name === 'Colaborativa' || isCollab)
+        ? dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name && d.role_name === 'Colaborativa')
+        : dailyTasks.filter(d => d.id === taskId);
 
     matches.forEach(task => {
         if (!task.subtasks_state || !task.subtasks_state[subIdx]) return;
