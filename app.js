@@ -13,21 +13,21 @@ const ROODS_ROLES = {
         name: 'Cajero - Barista',
         shift: 'Matutino',
         hours: '9:30 - 17:30',
-        taskRoles: ['Cajero - Barista']
+        taskRoles: ['Cajero - Barista', 'Cajero', 'Cajera', 'Barista']
     },
     'matutinoCocinaBarista': {
         key: 'matutinoCocinaBarista',
         name: 'Cocina - Barista',
         shift: 'Matutino',
         hours: '9:30 - 17:30',
-        taskRoles: ['Cocina - Barista']
+        taskRoles: ['Cocina - Barista', 'Cocina', 'Barista']
     },
     'vespertinoCajero': {
         key: 'vespertinoCajero',
         name: 'Cajero',
         shift: 'Vespertino',
         hours: '17:00 - 22:30',
-        taskRoles: ['Cajero']
+        taskRoles: ['Cajero', 'Cajera']
     },
     'vespertinoBarista': {
         key: 'vespertinoBarista',
@@ -48,14 +48,14 @@ const ROODS_ROLES = {
         name: 'Aux. Administrativo',
         shift: 'Matutino',
         hours: '14:30 - 17:00',
-        taskRoles: ['Aux. Administrativo']
+        taskRoles: ['Aux. Administrativo', 'Administrativo']
     },
     'apoyoCocina': {
         key: 'apoyoCocina',
         name: 'Apoyo Cocina',
         shift: 'Matutino',
         hours: '14:30 - 17:00',
-        taskRoles: ['Apoyo Cocina']
+        taskRoles: ['Apoyo Cocina', 'Apoyo', 'Cocina']
     },
     'apoyoGeneral': {
         key: 'apoyoGeneral',
@@ -252,12 +252,77 @@ async function syncFromCloud() {
             localStorage.setItem('roods_swaps', JSON.stringify(swapRequests));
         }
 
-        // 5. Sync Daily Tasks
+        // 5. Sync Daily Tasks (Smart Merge to preserve local completion state)
         const { data: dbDaily, error: errDaily } = await supabaseClient.from('roods_daily_tasks').select('*');
         if (errDaily) throw errDaily;
         if (dbDaily) {
-            dailyTasks = dbDaily;
+            const localMap = new Map();
+            dailyTasks.forEach(t => {
+                if (t && t.id) localMap.set(String(t.id), t);
+            });
+
+            const mergedToPush = [];
+            const mergedDaily = dbDaily.map(cloudTask => {
+                const localTask = localMap.get(String(cloudTask.id));
+                if (!localTask) return cloudTask;
+
+                let shouldPushUpdate = false;
+                const merged = { ...cloudTask };
+
+                // If local is completed but cloud is not, preserve local completion & push to cloud
+                if (localTask.completed && !cloudTask.completed) {
+                    merged.completed = true;
+                    merged.completed_by_employee_id = localTask.completed_by_employee_id;
+                    merged.completed_by_name = localTask.completed_by_name;
+                    merged.completed_at = localTask.completed_at || new Date().toISOString();
+                    if (localTask.subtasks_state) {
+                        merged.subtasks_state = localTask.subtasks_state;
+                    }
+                    shouldPushUpdate = true;
+                } else if (localTask.subtasks_state && cloudTask.subtasks_state) {
+                    // Merge subtasks completion state
+                    let subtaskUpdated = false;
+                    const mergedSubtasks = cloudTask.subtasks_state.map((st, i) => {
+                        const localSub = localTask.subtasks_state[i];
+                        if (localSub && localSub.completed && !st.completed) {
+                            subtaskUpdated = true;
+                            return { ...st, completed: true };
+                        }
+                        return st;
+                    });
+                    if (subtaskUpdated) {
+                        merged.subtasks_state = mergedSubtasks;
+                        if (mergedSubtasks.every(s => s.completed)) {
+                            merged.completed = true;
+                            merged.completed_by_employee_id = localTask.completed_by_employee_id;
+                            merged.completed_by_name = localTask.completed_by_name;
+                            merged.completed_at = localTask.completed_at || new Date().toISOString();
+                        }
+                        shouldPushUpdate = true;
+                    }
+                }
+
+                if (shouldPushUpdate) {
+                    mergedToPush.push(merged);
+                }
+
+                return merged;
+            });
+
+            // Retain any local unsynced tasks
+            dbDaily.forEach(c => localMap.delete(String(c.id)));
+            localMap.forEach((localUnsyncedTask) => {
+                mergedDaily.push(localUnsyncedTask);
+                mergedToPush.push(localUnsyncedTask);
+            });
+
+            dailyTasks = mergedDaily;
             localStorage.setItem('roods_daily_tasks', JSON.stringify(dailyTasks));
+
+            if (mergedToPush.length > 0) {
+                console.log("Pushing preserved local completion updates to cloud:", mergedToPush.length);
+                pushToCloudTable('roods_daily_tasks', mergedToPush);
+            }
         }
 
         // 6. Sync Task Templates
@@ -887,14 +952,19 @@ function generateDailyTasks(dateStr, schedule) {
     });
 
     const existing = dailyTasks.filter(d => d.date === dateStr);
+    const existingIds = new Set(existing.map(d => String(d.id)));
     const existingTaskKeys = new Set(existing.map(d => d.task_name + '|' + d.role_name));
     const newInstances = [];
+
+    const sanitize = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
 
     matchingTemplates.forEach(t => {
         const targetRole = (t.Rol === 'Colaborativa') ? 'Colaborativa' : schedule.roleName;
         const taskKey = t.Tarea + '|' + targetRole;
+        const deterministicId = `task_${dateStr}_${sanitize(targetRole)}_${sanitize(t.Tarea)}`;
 
-        if (!existingTaskKeys.has(taskKey)) {
+        if (!existingIds.has(deterministicId) && !existingTaskKeys.has(taskKey)) {
+            existingIds.add(deterministicId);
             existingTaskKeys.add(taskKey);
             let subtasksState = [];
             if (t.Subtareas && t.Subtareas.trim() !== "") {
@@ -905,7 +975,7 @@ function generateDailyTasks(dateStr, schedule) {
             }
 
             const instance = {
-                id: Date.now() + Math.random().toString(36).substr(2, 9),
+                id: deterministicId,
                 date: dateStr,
                 shift: t.Turno || 'Ambos',
                 task_name: t.Tarea,
@@ -916,7 +986,9 @@ function generateDailyTasks(dateStr, schedule) {
                 completed_at: null,
                 Imprescindible: t.Imprescindible || "No",
                 Subtareas: t.Subtareas || "",
-                subtasks_state: subtasksState
+                subtasks_state: subtasksState,
+                is_urgent: false,
+                urgent_acknowledged: false
             };
             dailyTasks.push(instance);
             newInstances.push(instance);
@@ -940,9 +1012,22 @@ function isShiftMatch(taskShift, activeShifts) {
 
 function isRoleMatch(taskRole, activeRoles) {
     if (!taskRole) return false;
-    if (taskRole.toLowerCase().trim() === 'todos') return true;
-    const normalizedTaskRole = taskRole.toLowerCase().replace(/\s+/g, '');
-    return activeRoles.some(ar => ar && ar.toLowerCase().replace(/\s+/g, '') === normalizedTaskRole);
+    const norm = str => String(str || '').toLowerCase().trim().replace(/[\s\-\_]+/g, '');
+    const normalizedTaskRole = norm(taskRole);
+    
+    if (normalizedTaskRole === 'todos' || normalizedTaskRole === 'ambos') return true;
+    
+    // Canonicalize gender variations (cajera -> cajero)
+    const canonical = str => norm(str).replace(/cajera/g, 'cajero');
+    const canonTask = canonical(taskRole);
+
+    return activeRoles.some(ar => {
+        if (!ar) return false;
+        const canonActive = canonical(ar);
+        if (canonActive === canonTask) return true;
+        if (canonActive.includes(canonTask) || canonTask.includes(canonActive)) return true;
+        return false;
+    });
 }
 
 function deduplicateTaskInstances(rawTasks) {
