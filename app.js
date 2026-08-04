@@ -993,6 +993,28 @@ function generateDailyTasks(dateStr, schedule) {
         return shiftMatch && dayMatch && roleMatch;
     });
 
+    // Prune uncompleted legacy/orphan task instances for today that no longer match any template for this schedule
+    const validTaskNames = new Set(matchingTemplates.map(t => t.Tarea));
+    const toRemoveIds = [];
+
+    dailyTasks.forEach(d => {
+        if (d.date === dateStr && d.role_name === schedule.roleName && !d.completed) {
+            if (!validTaskNames.has(d.task_name)) {
+                toRemoveIds.push(d.id);
+            }
+        }
+    });
+
+    if (toRemoveIds.length > 0) {
+        dailyTasks = dailyTasks.filter(d => !toRemoveIds.includes(d.id));
+        saveLocalDatabase();
+        if (supabaseClient) {
+            toRemoveIds.forEach(id => {
+                supabaseClient.from('roods_daily_tasks').delete().eq('id', id).then(() => {});
+            });
+        }
+    }
+
     const existing = dailyTasks.filter(d => d.date === dateStr);
     const existingIds = new Set(existing.map(d => String(d.id)));
     const existingTaskKeys = new Set(existing.map(d => d.task_name + '|' + d.role_name));
