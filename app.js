@@ -984,13 +984,13 @@ function generateDailyTasks(dateStr, schedule) {
         return shiftMatch && dayMatch && roleMatch;
     });
 
-    // Prune uncompleted legacy/orphan task instances for today that no longer match any template for this schedule
-    const validTaskNames = new Set(matchingTemplates.map(t => t.Tarea));
+    // Prune ALL uncompleted task instances for today whose template no longer exists in taskTemplates
+    const allValidTaskNames = new Set(taskTemplates.map(t => t.Tarea));
     const toRemoveIds = [];
 
     dailyTasks.forEach(d => {
-        if (d.date === dateStr && d.role_name === schedule.roleName && !d.completed) {
-            if (!validTaskNames.has(d.task_name)) {
+        if (d.date === dateStr && !d.completed) {
+            if (!allValidTaskNames.has(d.task_name)) {
                 toRemoveIds.push(d.id);
             }
         }
