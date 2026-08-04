@@ -316,13 +316,6 @@ async function syncFromCloud() {
                 return merged;
             });
 
-            // Retain any local unsynced tasks
-            dbDaily.forEach(c => localMap.delete(String(c.id)));
-            localMap.forEach((localUnsyncedTask) => {
-                mergedDaily.push(localUnsyncedTask);
-                mergedToPush.push(localUnsyncedTask);
-            });
-
             dailyTasks = mergedDaily;
             localStorage.setItem('roods_daily_tasks', JSON.stringify(dailyTasks));
 
