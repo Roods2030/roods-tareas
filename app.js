@@ -10,17 +10,17 @@ let supabaseClient = null;
 const ROODS_ROLES = {
     'matutinoCajeroBarista': {
         key: 'matutinoCajeroBarista',
-        name: 'Cajero - Barista',
+        name: 'CajiBari',
         shift: 'Matutino',
         hours: '9:30 - 17:30',
-        taskRoles: ['Cajero - Barista', 'Cajero', 'Cajera', 'Barista']
+        taskRoles: ['CajiBari', 'Cajero - Barista', 'Cajero', 'Cajera', 'Barista']
     },
     'matutinoCocinaBarista': {
         key: 'matutinoCocinaBarista',
-        name: 'Cocina - Barista',
+        name: 'CociBari',
         shift: 'Matutino',
         hours: '9:30 - 17:30',
-        taskRoles: ['Cocina - Barista', 'Barista']
+        taskRoles: ['CociBari', 'Cocina - Barista', 'Barista']
     },
     'vespertinoCajero': {
         key: 'vespertinoCajero',
@@ -52,10 +52,10 @@ const ROODS_ROLES = {
     },
     'apoyoCocina': {
         key: 'apoyoCocina',
-        name: 'Apoyo Cocina',
+        name: 'Coci',
         shift: 'Matutino',
         hours: '14:30 - 17:00',
-        taskRoles: ['Apoyo Cocina', 'Apoyo']
+        taskRoles: ['Coci', 'Apoyo Cocina', 'Apoyo']
     },
     'apoyoGeneral': {
         key: 'apoyoGeneral',

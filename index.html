@@ -259,8 +259,8 @@
                                     <label for="tomorrowTaskTarget" style="font-size: 0.75rem; font-weight:700;">Destinatario:</label>
                                     <select id="tomorrowTaskTarget" class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
                                         <option value="Todos">Colaborativa (Todos)</option>
-                                        <option value="Cajero - Barista">Rol: Cajero - Barista</option>
-                                        <option value="Cocina - Barista">Rol: Cocina - Barista</option>
+                                        <option value="CajiBari">Rol: CajiBari</option>
+                                        <option value="CociBari">Rol: CociBari</option>
                                         <option value="Cajero">Rol: Cajero</option>
                                         <option value="Barista">Rol: Barista</option>
                                         <option value="Cocina">Rol: Cocina</option>
@@ -401,11 +401,11 @@
                         <div class="role-column">
                             <h4>Turno Matutino (9:30 - 17:30)</h4>
                             <div class="form-group">
-                                <label for="roleMatutinoCajeroBarista">Cajero - Barista:</label>
+                                <label for="roleMatutinoCajeroBarista">CajiBari:</label>
                                 <select id="roleMatutinoCajeroBarista" class="form-control" onchange="saveWeeklyRoles()"></select>
                             </div>
                             <div class="form-group">
-                                <label for="roleMatutinoCocinaBarista">Cocina - Barista:</label>
+                                <label for="roleMatutinoCocinaBarista">CociBari:</label>
                                 <select id="roleMatutinoCocinaBarista" class="form-control" onchange="saveWeeklyRoles()"></select>
                             </div>
                         </div>
@@ -431,7 +431,7 @@
                                 <select id="roleAuxAdministrativo" class="form-control" onchange="saveWeeklyRoles()"></select>
                             </div>
                             <div class="form-group">
-                                <label for="roleApoyoCocina">Apoyo Cocina (14:30 - 17:00):</label>
+                                <label for="roleApoyoCocina">Coci (14:30 - 17:00):</label>
                                 <select id="roleApoyoCocina" class="form-control" onchange="saveWeeklyRoles()"></select>
                             </div>
                             <div class="form-group">
@@ -458,11 +458,11 @@
                                 <option value="Cajero">Cajero</option>
                                 <option value="Barista">Barista</option>
                                 <option value="Cocina">Cocina</option>
-                                <option value="Cajero - Barista">Cajero - Barista</option>
-                                <option value="Cocina - Barista">Cocina - Barista</option>
+                                <option value="CajiBari">CajiBari</option>
+                                <option value="CociBari">CociBari</option>
                                 <option value="Aux. Administrativo">Aux. Administrativo</option>
                                 <option value="Apoyo General">Apoyo General</option>
-                                <option value="Apoyo Cocina">Apoyo Cocina</option>
+                                <option value="Coci">Coci</option>
                                 <option value="Colaborativa">Colaborativa (Todos)</option>
                             </select>
                         </div>
@@ -601,13 +601,13 @@
                     <label for="templateRole">Rol Asignado:</label>
                     <select id="templateRole" class="form-control">
                         <!-- Roles Actualizados -->
-                        <option value="Cajero - Barista">Cajero - Barista</option>
-                        <option value="Cocina - Barista">Cocina - Barista</option>
+                        <option value="CajiBari">CajiBari</option>
+                        <option value="CociBari">CociBari</option>
                         <option value="Cajero">Cajero</option>
                         <option value="Barista">Barista</option>
                         <option value="Cocina">Cocina</option>
                         <option value="Aux. Administrativo">Aux. Administrativo</option>
-                        <option value="Apoyo Cocina">Apoyo Cocina</option>
+                        <option value="Coci">Coci</option>
                         <option value="Apoyo General">Apoyo General</option>
                         
                         <!-- Colaborativo -->
