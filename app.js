@@ -333,23 +333,38 @@ async function syncFromCloud() {
         }
 
         // 6. Sync Task Templates
+        parseTasksCsv(DEFAULT_TASKS_CSV);
+        const canonicalTemplates = taskTemplates;
+        const canonicalTaskNames = new Set(canonicalTemplates.map(t => t.Tarea));
+
         const { data: dbTemplates, error: errTemplates } = await supabaseClient.from('roods_task_templates').select('*').order('id', { ascending: true });
         if (errTemplates) throw errTemplates;
-        if (dbTemplates && dbTemplates.length > 0) {
-            const hasLegacyRoles = dbTemplates.some(t => ['Matutino', 'Vespertino', 'Todos', 'Ambos'].includes(t.Rol));
-            if (hasLegacyRoles) {
-                console.log("Legacy templates detected in Supabase, re-parsing clean defaults and syncing...");
-                parseTasksCsv(DEFAULT_TASKS_CSV);
-                localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
-                pushToCloudTable('roods_task_templates', taskTemplates);
-            } else {
-                taskTemplates = dbTemplates;
-                localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
-            }
-        } else {
-            parseTasksCsv(DEFAULT_TASKS_CSV);
+
+        const isCorrupted = !dbTemplates || dbTemplates.length === 0 || dbTemplates.some(t => 
+            ['Matutino', 'Vespertino', 'Todos', 'Ambos'].includes(t.Rol) || !canonicalTaskNames.has(t.Tarea)
+        );
+
+        if (isCorrupted) {
+            console.log("Corrupted/uncanonical templates detected in Supabase, replacing with canonical templates...");
+            taskTemplates = canonicalTemplates;
             localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
-            pushToCloudTable('roods_task_templates', taskTemplates);
+            await supabaseClient.from('roods_task_templates').delete().neq('id', 0);
+            await pushToCloudTable('roods_task_templates', taskTemplates);
+        } else {
+            taskTemplates = dbTemplates;
+            localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
+        }
+
+        // Clean any invalid daily task instances for today
+        const todayStr = formatDateString(new Date());
+        const invalidDaily = dailyTasks.filter(d => d.date === todayStr && d.role_name !== 'Colaborativa' && !canonicalTaskNames.has(d.task_name));
+        if (invalidDaily.length > 0) {
+            const invalidIds = invalidDaily.map(d => d.id);
+            dailyTasks = dailyTasks.filter(d => !invalidIds.includes(d.id));
+            saveLocalDatabase();
+            invalidIds.forEach(id => {
+                supabaseClient.from('roods_daily_tasks').delete().eq('id', id).then(() => {});
+            });
         }
 
         setSyncIndicator("Nube Sincronizada", "");
