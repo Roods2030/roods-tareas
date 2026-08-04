@@ -352,10 +352,33 @@ async function syncFromCloud() {
     }
 }
 
+function sanitizeDailyTask(t) {
+    if (!t) return t;
+    return {
+        id: String(t.id),
+        date: String(t.date || ''),
+        shift: String(t.shift || 'Ambos'),
+        task_name: String(t.task_name || ''),
+        role_name: String(t.role_name || ''),
+        completed: Boolean(t.completed),
+        completed_by_employee_id: (t.completed_by_employee_id !== null && t.completed_by_employee_id !== undefined && t.completed_by_employee_id !== '') ? Number(t.completed_by_employee_id) : null,
+        completed_by_name: t.completed_by_name || null,
+        completed_at: t.completed_at || null,
+        Imprescindible: t.Imprescindible || 'No',
+        Subtareas: t.Subtareas || '',
+        subtasks_state: Array.isArray(t.subtasks_state) ? t.subtasks_state : [],
+        is_urgent: t.is_urgent ? true : false,
+        urgent_acknowledged: t.urgent_acknowledged ? true : false
+    };
+}
+
 async function pushToCloudTable(tableName, data) {
     if (!supabaseClient) return;
     try {
-        const payload = Array.isArray(data) ? data : [data];
+        let payload = Array.isArray(data) ? data : [data];
+        if (tableName === 'roods_daily_tasks') {
+            payload = payload.map(t => sanitizeDailyTask(t));
+        }
         const { error } = await supabaseClient.from(tableName).upsert(payload);
         if (error) throw error;
         setSyncIndicator("Cambio Sincronizado", "");
