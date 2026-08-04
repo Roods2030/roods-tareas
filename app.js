@@ -2738,9 +2738,13 @@ async function clearAllTaskTemplates() {
     
     if (supabaseClient) {
         try {
-            await supabaseClient.from('roods_task_templates').delete().gte('id', 0);
-            await supabaseClient.from('roods_daily_tasks').delete().gte('id', 0);
-            showNotification("🗑️ Todas las tareas base han sido eliminadas de la nube.");
+            const { error: err1 } = await supabaseClient.from('roods_task_templates').delete().not('id', 'is', null);
+            if (err1) console.error("Error deleting roods_task_templates:", err1);
+            
+            const { error: err2 } = await supabaseClient.from('roods_daily_tasks').delete().not('id', 'is', null);
+            if (err2) console.error("Error deleting roods_daily_tasks:", err2);
+
+            showNotification("🗑️ Todas las tareas base y misiones del día han sido eliminadas de la nube.");
         } catch (e) {
             console.error("Error clearing templates from cloud:", e);
             showNotification(`⚠️ Eliminado localmente, pero falló sincronización: ${e.message || JSON.stringify(e)}`, 8000);
