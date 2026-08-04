@@ -20,7 +20,7 @@ const ROODS_ROLES = {
         name: 'Cocina - Barista',
         shift: 'Matutino',
         hours: '9:30 - 17:30',
-        taskRoles: ['Cocina - Barista', 'Cocina', 'Barista']
+        taskRoles: ['Cocina - Barista', 'Barista']
     },
     'vespertinoCajero': {
         key: 'vespertinoCajero',
@@ -55,7 +55,7 @@ const ROODS_ROLES = {
         name: 'Apoyo Cocina',
         shift: 'Matutino',
         hours: '14:30 - 17:00',
-        taskRoles: ['Apoyo Cocina', 'Apoyo', 'Cocina']
+        taskRoles: ['Apoyo Cocina', 'Apoyo']
     },
     'apoyoGeneral': {
         key: 'apoyoGeneral',
