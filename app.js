@@ -98,37 +98,37 @@ const DEFAULT_EMPLOYEES = [
 
 // Default tasks if CSV is empty
 const DEFAULT_TASKS_CSV = `Tarea,Rol,Turno,Dias,Imprescindible,Subtareas
-Contar fondo de caja inicial (apertura),Cajera,Todos,Si,
-Limpieza de barra de atención y mesas de clientes,Cajera,Todos,No,
-Recibir y acomodar pan fresco del día,Cajera,Todos,No,Croissants;Conchas;Mantecadas;Birotes;Donas
-Limpieza y desinfección de la pantalla POS y terminales de pago,Cajera,Todos,No,
-Corte de caja, arqueo de efectivo y resguardo de valores (cierre),Todos,Si,
-Calibración de molinos (peso y tiempo de extracción),Barista,Todos,No,
-Encendido y calentamiento de la máquina de espresso,Barista,Todos,No,
-Rellenar tolvas de café en grano e insumos de barra (leches y jarabes),Barista,Todos,No,Café en grano;Leche entera;Leche deslactosada;Leche de almendra;Jarabe vainilla;Jarabe caramelo
-Limpieza profunda de lancetas de vapor de la máquina de café,Barista,Todos,Si,
-Lavado químico de filtros, portafiltros y duchas de espresso (backflush),Todos,Si,
-Desarmado y limpieza interna del molino de café,Barista,Lunes,No,
-Limpieza de barra de café, rejillas y sacudidores,Todos,No,
-Sanitización de superficies de trabajo y utensilios en cocina,Cocina,Todos,No,
-Encendido de plancha, hornos y salamandra (apertura),Todos,No,
-Preparación y porcionado de ingredientes (prep de verduras y proteínas),Cocina,Todos,No,Picar jitomate;Picar cebolla;Picar lechuga;Rebanar jamón;Cocinar tocino
-Control y registro de temperaturas de refrigeradores y congeladores,Cocina,Todos,Si,
-Limpieza profunda de plancha, estufa y campana de extracción,Todos,No,
-Lavado y sanitización de utensilios y loza de cocina (cierre),Cocina,Todos,No,
-Retirar basura de cocina y desinfectar botes,Cocina,Todos,No,
-Apagar plancha, hornos y salamandra (cierre),Todos,Si,
-Ir por compras locales del día (tiendita/verdulería),Cocina,Todos,No,Comprar leche entera (6L);Comprar limones (1kg);Comprar aguacate (2kg);Comprar azúcar (2kg)
-Lavado profundo de loza y cristalería acumulada,Apoyo,Fin de Semana,No,
-Apoyar en el servicio a mesas y entrega de pedidos a clientes,Apoyo,Fin de Semana,No,
-Limpieza y desinfección de sanitarios de clientes y personal,Apoyo,Fin de Semana,No,Espejos;Inodoros;Lavabos;Toallas de papel;Jabón de manos
-Rellenar servilleteros, cubiertos y estación de condimentos,Fin de Semana,No,
-Barrer y trapear el salón principal y terraza de la cafetería,Colaborativa,Todos,No,
-Limpieza de vidrios y puertas de acceso de la sucursal,Colaborativa,Miércoles,No,
-Sacar basura general de salón al contenedor externo (cierre),Colaborativa,Todos,Si,
-Restablecer inventario de vasos, tapas,Vespertino,Todos,No,
-Lavado profundo de trampas de grasa e hidráulica de cocina,Colaborativa,Lunes,Si,
-Desinfección de menús físicos y estaciones de servicio,Colaborativa,Todos,No,`;
+Contar fondo de caja inicial (apertura),Cajera,Matutino,Todos,Si,
+Limpieza de barra de atención y mesas de clientes,Cajera,Ambos,Todos,No,
+Recibir y acomodar pan fresco del día,Cajera,Matutino,Todos,No,Croissants;Conchas;Mantecadas;Birotes;Donas
+Limpieza y desinfección de la pantalla POS y terminales de pago,Cajera,Ambos,Todos,No,
+Corte de caja, arqueo de efectivo y resguardo de valores (cierre),Cajera,Vespertino,Todos,Si,
+Calibración de molinos (peso y tiempo de extracción),Barista,Matutino,Todos,No,
+Encendido y calentamiento de la máquina de espresso,Barista,Matutino,Todos,No,
+Rellenar tolvas de café en grano e insumos de barra (leches y jarabes),Barista,Ambos,Todos,No,Café en grano;Leche entera;Leche deslactosada;Leche de almendra;Jarabe vainilla;Jarabe caramelo
+Limpieza profunda de lancetas de vapor de la máquina de café,Barista,Ambos,Todos,Si,
+Lavado químico de filtros, portafiltros y duchas de espresso (backflush),Barista,Vespertino,Todos,Si,
+Desarmado y limpieza interna del molino de café,Barista,Vespertino,Lunes,No,
+Limpieza de barra de café, rejillas y sacudidores,Barista,Vespertino,Todos,No,
+Sanitización de superficies de trabajo y utensilios en cocina,Cocina,Ambos,Todos,No,
+Encendido de plancha, hornos y salamandra (apertura),Cocina,Matutino,Todos,No,
+Preparación y porcionado de ingredientes (prep de verduras y proteínas),Cocina,Matutino,Todos,No,Picar jitomate;Picar cebolla;Picar lechuga;Rebanar jamón;Cocinar tocino
+Control y registro de temperaturas de refrigeradores y congeladores,Cocina,Ambos,Todos,Si,
+Limpieza profunda de plancha, estufa y campana de extracción,Cocina,Vespertino,Todos,No,
+Lavado y sanitización de utensilios y loza de cocina (cierre),Cocina,Vespertino,Todos,No,
+Retirar basura de cocina y desinfectar botes,Cocina,Vespertino,Todos,No,
+Apagar plancha, hornos y salamandra (cierre),Cocina,Vespertino,Todos,Si,
+Ir por compras locales del día (tiendita/verdulería),Cocina,Matutino,Todos,No,Comprar leche entera (6L);Comprar limones (1kg);Comprar aguacate (2kg);Comprar azúcar (2kg)
+Lavado profundo de loza y cristalería acumulada,Apoyo,Ambos,Fin de Semana,No,
+Apoyar en el servicio a mesas y entrega de pedidos a clientes,Apoyo,Ambos,Fin de Semana,No,
+Limpieza y desinfección de sanitarios de clientes y personal,Apoyo,Ambos,Fin de Semana,No,Espejos;Inodoros;Lavabos;Toallas de papel;Jabón de manos
+Rellenar servilleteros, cubiertos y estación de condimentos,Apoyo,Ambos,Fin de Semana,No,
+Barrer y trapear el salón principal y terraza de la cafetería,Colaborativa,Ambos,Todos,No,
+Limpieza de vidrios y puertas de acceso de la sucursal,Colaborativa,Ambos,Miércoles,No,
+Sacar basura general de salón al contenedor externo (cierre),Colaborativa,Vespertino,Todos,Si,
+Restablecer inventario de vasos, tapas,Colaborativa,Vespertino,Todos,No,
+Lavado profundo de trampas de grasa e hidráulica de cocina,Colaborativa,Vespertino,Lunes,Si,
+Desinfección de menús físicos y estaciones de servicio,Colaborativa,Ambos,Todos,No,`;
 
 // --- Current Roles Weekly View Helper ---
 let currentRoleViewWeekStart = getStartOfWeekWednesday(new Date());
@@ -184,10 +184,17 @@ function loadLocalDatabase() {
     try {
         const savedTemplates = localStorage.getItem('roods_task_templates');
         if (savedTemplates) {
-            taskTemplates = JSON.parse(savedTemplates);
+            const parsed = JSON.parse(savedTemplates);
+            const hasLegacyRoles = parsed.some(t => ['Matutino', 'Vespertino', 'Todos', 'Ambos'].includes(t.Rol));
+            if (hasLegacyRoles) {
+                parseTasksCsv(DEFAULT_TASKS_CSV);
+                localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
+            } else {
+                taskTemplates = parsed;
+            }
         } else {
-            // Parse default CSV
             parseTasksCsv(DEFAULT_TASKS_CSV);
+            localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
         }
     } catch (e) {
         console.error("Error loading task templates, resetting:", e);
@@ -328,9 +335,21 @@ async function syncFromCloud() {
         // 6. Sync Task Templates
         const { data: dbTemplates, error: errTemplates } = await supabaseClient.from('roods_task_templates').select('*').order('id', { ascending: true });
         if (errTemplates) throw errTemplates;
-        if (dbTemplates) {
-            taskTemplates = dbTemplates;
+        if (dbTemplates && dbTemplates.length > 0) {
+            const hasLegacyRoles = dbTemplates.some(t => ['Matutino', 'Vespertino', 'Todos', 'Ambos'].includes(t.Rol));
+            if (hasLegacyRoles) {
+                console.log("Legacy templates detected in Supabase, re-parsing clean defaults and syncing...");
+                parseTasksCsv(DEFAULT_TASKS_CSV);
+                localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
+                pushToCloudTable('roods_task_templates', taskTemplates);
+            } else {
+                taskTemplates = dbTemplates;
+                localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
+            }
+        } else {
+            parseTasksCsv(DEFAULT_TASKS_CSV);
             localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
+            pushToCloudTable('roods_task_templates', taskTemplates);
         }
 
         setSyncIndicator("Nube Sincronizada", "");
