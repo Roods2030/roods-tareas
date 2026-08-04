@@ -1024,9 +1024,7 @@ function isRoleMatch(taskRole, activeRoles) {
     return activeRoles.some(ar => {
         if (!ar) return false;
         const canonActive = canonical(ar);
-        if (canonActive === canonTask) return true;
-        if (canonActive.includes(canonTask) || canonTask.includes(canonActive)) return true;
-        return false;
+        return canonActive === canonTask;
     });
 }
 
