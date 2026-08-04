@@ -119,10 +119,10 @@ Lavado y sanitización de utensilios y loza de cocina (cierre),Cocina,Vespertino
 Retirar basura de cocina y desinfectar botes,Cocina,Vespertino,Todos,No,
 Apagar plancha, hornos y salamandra (cierre),Cocina,Vespertino,Todos,Si,
 Ir por compras locales del día (tiendita/verdulería),Cocina,Matutino,Todos,No,Comprar leche entera (6L);Comprar limones (1kg);Comprar aguacate (2kg);Comprar azúcar (2kg)
-Lavado profundo de loza y cristalería acumulada,Apoyo,Ambos,Fin de Semana,No,
-Apoyar en el servicio a mesas y entrega de pedidos a clientes,Apoyo,Ambos,Fin de Semana,No,
-Limpieza y desinfección de sanitarios de clientes y personal,Apoyo,Ambos,Fin de Semana,No,Espejos;Inodoros;Lavabos;Toallas de papel;Jabón de manos
-Rellenar servilleteros, cubiertos y estación de condimentos,Apoyo,Ambos,Fin de Semana,No,
+Lavado profundo de loza y cristalería acumulada,Apoyo,Ambos,Todos,No,
+Apoyar en el servicio a mesas y entrega de pedidos a clientes,Apoyo,Ambos,Todos,No,
+Limpieza y desinfección de sanitarios de clientes y personal,Apoyo,Ambos,Todos,No,Espejos;Inodoros;Lavabos;Toallas de papel;Jabón de manos
+Rellenar servilleteros, cubiertos y estación de condimentos,Apoyo,Ambos,Todos,No,
 Barrer y trapear el salón principal y terraza de la cafetería,Colaborativa,Ambos,Todos,No,
 Limpieza de vidrios y puertas de acceso de la sucursal,Colaborativa,Ambos,Miércoles,No,
 Sacar basura general de salón al contenedor externo (cierre),Colaborativa,Vespertino,Todos,Si,
