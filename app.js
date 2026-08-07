@@ -13,14 +13,14 @@ const ROODS_ROLES = {
         name: 'CajiBari',
         shift: 'Matutino',
         hours: '9:30 - 17:30',
-        taskRoles: ['CajiBari', 'Cajero - Barista', 'Cajero', 'Cajera', 'Barista']
+        taskRoles: ['CajiBari']
     },
     'matutinoCocinaBarista': {
         key: 'matutinoCocinaBarista',
         name: 'CociBari',
         shift: 'Matutino',
         hours: '9:30 - 17:30',
-        taskRoles: ['CociBari', 'Cocina - Barista', 'Barista']
+        taskRoles: ['CociBari']
     },
     'vespertinoCajero': {
         key: 'vespertinoCajero',
@@ -174,7 +174,12 @@ function loadLocalDatabase() {
     
     // Load Daily Instantiated Tasks
     try {
-        dailyTasks = JSON.parse(localStorage.getItem('roods_daily_tasks')) || [];
+        let loadedTasks = JSON.parse(localStorage.getItem('roods_daily_tasks')) || [];
+        // Prune tasks older than 3 days to avoid QuotaExceededError in localStorage
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 3);
+        const cutoffStr = formatDateString(cutoff);
+        dailyTasks = loadedTasks.filter(t => t.date >= cutoffStr);
     } catch (e) {
         console.error("Error loading daily tasks, resetting:", e);
         dailyTasks = [];
@@ -184,14 +189,7 @@ function loadLocalDatabase() {
     try {
         const savedTemplates = localStorage.getItem('roods_task_templates');
         if (savedTemplates) {
-            const parsed = JSON.parse(savedTemplates);
-            const hasLegacyRoles = parsed.some(t => ['Matutino', 'Vespertino', 'Todos', 'Ambos'].includes(t.Rol));
-            if (hasLegacyRoles) {
-                parseTasksCsv(DEFAULT_TASKS_CSV);
-                localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
-            } else {
-                taskTemplates = parsed;
-            }
+            taskTemplates = JSON.parse(savedTemplates);
         } else {
             parseTasksCsv(DEFAULT_TASKS_CSV);
             localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
@@ -260,7 +258,12 @@ async function syncFromCloud() {
         }
 
         // 5. Sync Daily Tasks (Smart Merge to preserve local completion state)
-        const { data: dbDaily, error: errDaily } = await supabaseClient.from('roods_daily_tasks').select('*');
+        // Limit sync to last 3 days to prevent localStorage overflow
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 3);
+        const cutoffStr = formatDateString(cutoff);
+        
+        const { data: dbDaily, error: errDaily } = await supabaseClient.from('roods_daily_tasks').select('*').gte('date', cutoffStr);
         if (errDaily) throw errDaily;
         if (dbDaily) {
             const localMap = new Map();
@@ -330,17 +333,8 @@ async function syncFromCloud() {
         if (errTemplates) throw errTemplates;
 
         if (dbTemplates) {
-            const hasLegacyRoles = dbTemplates.some(t => ['Matutino', 'Vespertino', 'Todos', 'Ambos'].includes(t.Rol));
-            if (hasLegacyRoles) {
-                console.log("Legacy template roles detected in Supabase, updating with clean defaults...");
-                parseTasksCsv(DEFAULT_TASKS_CSV);
-                localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
-                await supabaseClient.from('roods_task_templates').delete().neq('id', 0);
-                await pushToCloudTable('roods_task_templates', taskTemplates);
-            } else {
-                taskTemplates = dbTemplates;
-                localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
-            }
+            taskTemplates = dbTemplates;
+            localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
         }
 
         setSyncIndicator("Nube Sincronizada", "");
