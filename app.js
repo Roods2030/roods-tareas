@@ -615,8 +615,9 @@ function initEmployeeView() {
     updateAttendanceUI(today, schedules);
 
 
-    // Muro de mensajes load
+    // Muro de mensajes y mensajes privados load
     loadMuroMessages();
+    pollEmployeeMessages();
 }
 
 function resolveTodaySchedules(empId, date) {
@@ -978,12 +979,13 @@ function generateDailyTasks(dateStr, schedule) {
         return shiftMatch && dayMatch && roleMatch;
     });
 
-    // Prune ALL uncompleted task instances for today whose template no longer exists in taskTemplates
+    // Prune uncompleted task instances for today whose template no longer exists in taskTemplates
+    // NOTE: Only prune auto-generated template tasks (starting with task_). Never prune manual/spontaneous/tomorrow tasks!
     const allValidTaskNames = new Set(taskTemplates.map(t => t.Tarea));
     const toRemoveIds = [];
 
     dailyTasks.forEach(d => {
-        if (d.date === dateStr && !d.completed) {
+        if (d.date === dateStr && !d.completed && !d.is_manual && String(d.id).startsWith('task_')) {
             if (!allValidTaskNames.has(d.task_name)) {
                 toRemoveIds.push(d.id);
             }
@@ -1122,8 +1124,11 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
         return isShiftMatch(d.shift, activeShifts);
     });
 
-    // Individual tasks matching user's active roles
-    const myTasksRaw = todayTasks.filter(t => isRoleMatch(t.role_name, activeRolesList));
+    // Individual tasks matching user's active roles or directly assigned to this employee
+    const myTasksRaw = todayTasks.filter(t => 
+        (t.assigned_employee_id && Number(t.assigned_employee_id) === Number(currentUser.id)) ||
+        (!t.assigned_employee_id && isRoleMatch(t.role_name, activeRolesList))
+    );
     const myTasks = deduplicateTaskInstances(myTasksRaw);
     
     // Collaborative tasks
@@ -1428,6 +1433,7 @@ function switchTaskTab(tabId) {
     }
     
     if (tabId === 'mensajes') {
+        pollEmployeeMessages();
         markPrivateMessagesAsRead();
     }
 }
@@ -1438,6 +1444,13 @@ let hasShownGlobalAnnounce = false;
 async function pollEmployeeMessages() {
     if (!currentUser || currentUser.is_admin) return;
     
+    // Check local messages first for instant rendering
+    let localMessages = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
+    let myLocal = localMessages.filter(m => Number(m.recipient_id) === Number(currentUser.id));
+    if (myLocal.length > 0) {
+        renderPrivateMessages(myLocal);
+    }
+
     // 1. Check Global Announcements
     if (supabaseClient && !hasShownGlobalAnnounce) {
         try {
@@ -1458,7 +1471,6 @@ async function pollEmployeeMessages() {
                     document.getElementById('globalAnnounceTextDisplay').textContent = announce.message;
                     document.getElementById('globalAnnounceModal').classList.remove('hidden');
                     
-                    // Mark as seen immediately so it doesn't loop if user clicks away
                     seenArr.push(announce.id);
                     localStorage.setItem('roods_seen_announcements', JSON.stringify(seenArr));
                     hasShownGlobalAnnounce = true;
@@ -1469,19 +1481,30 @@ async function pollEmployeeMessages() {
         }
     }
     
-    // 2. Check Private Messages
+    // 2. Check Private Messages from Supabase
     if (supabaseClient) {
         try {
-            const { data } = await supabaseClient
+            const { data, error } = await supabaseClient
                 .from('roods_private_messages')
                 .select('*')
                 .eq('recipient_id', currentUser.id)
                 .order('created_at', { ascending: false });
                 
-            if (data) {
-                renderPrivateMessages(data);
+            if (!error && data) {
+                const map = new Map();
+                data.forEach(m => map.set(String(m.id || m.created_at), m));
+                myLocal.forEach(m => {
+                    const key = String(m.id || m.created_at);
+                    if (!map.has(key)) map.set(key, m);
+                });
+                const merged = Array.from(map.values()).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
                 
-                const unreadCount = data.filter(m => !m.read).length;
+                const otherLocal = localMessages.filter(m => Number(m.recipient_id) !== Number(currentUser.id));
+                localStorage.setItem('roods_private_messages', JSON.stringify([...otherLocal, ...merged]));
+
+                renderPrivateMessages(merged);
+                
+                const unreadCount = merged.filter(m => !m.read).length;
                 const badge = document.getElementById('mensajesBadgeDot');
                 if (badge) {
                     if (unreadCount > 0 && currentTaskTab !== 'mensajes') {
@@ -1527,17 +1550,33 @@ function renderPrivateMessages(messages) {
 }
 
 async function markPrivateMessagesAsRead() {
-    if (!currentUser || currentUser.is_admin || !supabaseClient) return;
-    document.getElementById('mensajesBadgeDot').classList.add('hidden');
+    if (!currentUser || currentUser.is_admin) return;
+    const badge = document.getElementById('mensajesBadgeDot');
+    if (badge) badge.classList.add('hidden');
     
-    try {
-        await supabaseClient
-            .from('roods_private_messages')
-            .update({ read: true })
-            .eq('recipient_id', currentUser.id)
-            .eq('read', false);
-    } catch(e) {
-        console.error("Failed to mark messages as read");
+    // Mark locally
+    let localMessages = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
+    let modified = false;
+    localMessages.forEach(m => {
+        if (Number(m.recipient_id) === Number(currentUser.id) && !m.read) {
+            m.read = true;
+            modified = true;
+        }
+    });
+    if (modified) {
+        localStorage.setItem('roods_private_messages', JSON.stringify(localMessages));
+    }
+    
+    if (supabaseClient) {
+        try {
+            await supabaseClient
+                .from('roods_private_messages')
+                .update({ read: true })
+                .eq('recipient_id', currentUser.id)
+                .eq('read', false);
+        } catch(e) {
+            console.error("Failed to mark messages as read");
+        }
     }
 }
 
@@ -1677,8 +1716,8 @@ function renderAdminMonitoreo() {
             const activeRoles = [...sched.roles, sched.roleName, sched.roleKey];
             const empTasksRaw = dailyTasks.filter(d => 
                 d.date === todayStr && 
-                isShiftMatch(d.shift, [sched.shift]) && 
-                isRoleMatch(d.role_name, activeRoles)
+                ((d.assigned_employee_id && Number(d.assigned_employee_id) === Number(emp.id)) ||
+                 (!d.assigned_employee_id && isShiftMatch(d.shift, [sched.shift]) && isRoleMatch(d.role_name, activeRoles)))
             );
             
             const empTasks = deduplicateTaskInstances(empTasksRaw);
@@ -1886,7 +1925,7 @@ async function sendTomorrowTask(event) {
     const tomorrowStr = formatDateString(tomorrow);
     
     const newTomorrowTask = {
-        id: Date.now() + Math.random().toString().slice(2, 6),
+        id: `manual_tmrw_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         date: tomorrowStr,
         shift: targetShift,
         role_name: targetRole === 'Todos' ? 'Colaborativa' : targetRole,
@@ -1896,7 +1935,9 @@ async function sendTomorrowTask(event) {
         subtasks_state: [],
         Imprescindible: 'No',
         is_urgent: false,
-        urgent_acknowledged: false
+        urgent_acknowledged: false,
+        assigned_role: targetRole === 'Todos' ? 'Colaborativa' : targetRole,
+        is_manual: true
     };
     
     dailyTasks.push(newTomorrowTask);
@@ -1953,101 +1994,239 @@ async function renderHistorialTasks() {
     if (!dateInput.value) {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
-        
-        // Format to YYYY-MM-DD for input type="date"
         const yyyy = yesterday.getFullYear();
         const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
         const dd = String(yesterday.getDate()).padStart(2, '0');
         dateInput.value = `${yyyy}-${mm}-${dd}`;
     }
     
-    // The input date is already YYYY-MM-DD, which matches the DB format
     const targetDateStr = dateInput.value;
+    grid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;">Cargando historial de asistencia y misiones... ⏳</div>';
     
-    grid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;">Cargando historial de la base de datos... ⏳</div>';
-    
-    if (!supabaseClient) {
-        grid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1; color: red;">Error: No hay conexión con la base de datos.</div>';
+    let dateAttendance = [];
+    let dateTasks = [];
+
+    // 1. Fetch Attendance (Cloud + Local fallback)
+    if (supabaseClient) {
+        try {
+            const { data: attData, error: attErr } = await supabaseClient
+                .from('roods_attendance')
+                .select('*')
+                .eq('date', targetDateStr);
+            if (!attErr && attData) {
+                dateAttendance = attData;
+            }
+        } catch (e) {
+            console.warn("Could not fetch cloud attendance for date, using local:", e);
+        }
+    }
+    // Merge local attendance logs for this date
+    const localAtt = attendanceLogs.filter(l => l.date === targetDateStr);
+    const attMap = new Map();
+    dateAttendance.forEach(a => attMap.set(String(a.id), a));
+    localAtt.forEach(a => {
+        if (!attMap.has(String(a.id))) attMap.set(String(a.id), a);
+    });
+    dateAttendance = Array.from(attMap.values());
+
+    // 2. Fetch Tasks (Cloud + Local fallback)
+    if (supabaseClient) {
+        try {
+            const { data: taskData, error: taskErr } = await supabaseClient
+                .from('roods_daily_tasks')
+                .select('*')
+                .eq('date', targetDateStr);
+            if (!taskErr && taskData) {
+                dateTasks = taskData;
+            }
+        } catch (e) {
+            console.warn("Could not fetch cloud tasks for date, using local:", e);
+        }
+    }
+    // Merge local tasks for this date
+    const localT = dailyTasks.filter(t => t.date === targetDateStr);
+    const taskMap = new Map();
+    dateTasks.forEach(t => taskMap.set(String(t.id), t));
+    localT.forEach(t => {
+        if (!taskMap.has(String(t.id))) taskMap.set(String(t.id), t);
+    });
+    dateTasks = Array.from(taskMap.values());
+
+    if (dateAttendance.length === 0 && dateTasks.length === 0) {
+        grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;">No se encontraron registros de asistencia ni misiones para la fecha <strong>${targetDateStr}</strong>.</div>`;
         return;
     }
-    
-    try {
-        const { data, error } = await supabaseClient
-            .from('roods_daily_tasks')
-            .select('*')
-            .eq('date', targetDateStr);
-            
-        if (error) throw error;
-        
-        if (!data || data.length === 0) {
-            grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;">No se encontraron tareas registradas para la fecha ${targetDateStr}.</div>`;
-            return;
+
+    grid.innerHTML = "";
+
+    // Parse target date for schedule lookup
+    const [tY, tM, tD] = targetDateStr.split('-').map(Number);
+    const targetDateObj = new Date(tY, tM - 1, tD);
+
+    // Helper for hours worked calculation
+    const calcDuration = (tIn, tOut) => {
+        if (!tIn || !tOut) return "";
+        try {
+            const [h1, m1] = tIn.split(':').map(Number);
+            const [h2, m2] = tOut.split(':').map(Number);
+            let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+            if (diff < 0) diff += 24 * 60;
+            const h = Math.floor(diff / 60);
+            const m = diff % 60;
+            return `${h}h ${m}m`;
+        } catch(e) {
+            return "";
         }
-        
-        // Group by role
-        const roleGroups = {};
-        data.forEach(task => {
-            if (!roleGroups[task.role_name]) {
-                roleGroups[task.role_name] = [];
-            }
-            roleGroups[task.role_name].push(task);
-        });
-        
-        grid.innerHTML = "";
-        
-        Object.keys(roleGroups).forEach(role => {
-            const roleTasks = roleGroups[role];
-            
-            // Deduplicate by task name just in case
-            const uniqueTasks = [];
-            const seen = new Set();
-            roleTasks.forEach(t => {
-                if (!seen.has(t.task_name)) {
-                    seen.add(t.task_name);
-                    uniqueTasks.push(t);
-                }
-            });
-            
-            const total = uniqueTasks.length;
-            const completed = uniqueTasks.filter(t => t.completed).length;
-            const percent = total > 0 ? Math.round((completed/total)*100) : 100;
-            
-            let html = `<div class="monitor-tasks-list" style="margin-top: 12px; font-size: 0.8rem; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">`;
-            
-            uniqueTasks.forEach(t => {
+    };
+
+    // Render cards for each employee who has attendance OR schedule OR assigned tasks
+    const relevantEmployees = employees.filter(e => {
+        if (e.is_admin) return false;
+        const hasLogs = dateAttendance.some(l => Number(l.employee_id) === Number(e.id));
+        const hasTasks = dateTasks.some(t => Number(t.completed_by_employee_id) === Number(e.id) || Number(t.assigned_employee_id) === Number(e.id));
+        const scheds = resolveTodaySchedules(e.id, targetDateObj);
+        return hasLogs || hasTasks || scheds.length > 0;
+    });
+
+    relevantEmployees.forEach(emp => {
+        const empLogs = dateAttendance.filter(l => Number(l.employee_id) === Number(emp.id));
+        const checkIn = empLogs.find(l => l.type === 'entrada');
+        const checkOut = empLogs.find(l => l.type === 'salida');
+
+        const scheds = resolveTodaySchedules(emp.id, targetDateObj);
+        const roleLabel = checkIn?.role_name || (scheds.length > 0 ? scheds.map(s => s.roleDisplay).join(', ') : 'Colaborador');
+        const shiftLabel = checkIn?.shift || (scheds.length > 0 ? scheds[0].shift : '');
+
+        // Determine attendance badge HTML
+        let attHtml = "";
+        if (checkIn && checkOut) {
+            const dur = calcDuration(checkIn.time, checkOut.time);
+            attHtml = `
+                <div style="background: rgba(76, 175, 80, 0.08); border-left: 3px solid #4CAF50; padding: 6px 10px; border-radius: 4px; margin-top: 8px; font-size: 0.8rem;">
+                    <div>🟢 <strong>Entrada:</strong> ${checkIn.time}</div>
+                    <div style="margin-top: 2px;">🔴 <strong>Salida:</strong> ${checkOut.time} ${dur ? `<span style="color:#555; font-size:0.75rem;">(⏱️ ${dur})</span>` : ''}</div>
+                </div>`;
+        } else if (checkIn && !checkOut) {
+            attHtml = `
+                <div style="background: rgba(255, 152, 0, 0.08); border-left: 3px solid #FF9800; padding: 6px 10px; border-radius: 4px; margin-top: 8px; font-size: 0.8rem;">
+                    <div>🟢 <strong>Entrada:</strong> ${checkIn.time}</div>
+                    <div style="margin-top: 2px; color: #c62828;">🔴 <strong>Salida:</strong> <em>Sin checar salida</em></div>
+                </div>`;
+        } else {
+            attHtml = `
+                <div style="background: rgba(0,0,0,0.04); border-left: 3px solid #9e9e9e; padding: 6px 10px; border-radius: 4px; margin-top: 8px; font-size: 0.8rem; color: #777;">
+                    ⚪ <strong>Sin asistencia registrada</strong>
+                </div>`;
+        }
+
+        // Find individual tasks for this employee
+        const activeRoles = scheds.flatMap(s => [s.roleName, ...s.roles, s.roleKey]);
+        if (checkIn?.role_name) activeRoles.push(checkIn.role_name);
+
+        const empTasksRaw = dateTasks.filter(t => 
+            (t.completed_by_employee_id && Number(t.completed_by_employee_id) === Number(emp.id)) ||
+            (t.assigned_employee_id && Number(t.assigned_employee_id) === Number(emp.id)) ||
+            (!t.assigned_employee_id && isRoleMatch(t.role_name, activeRoles))
+        );
+        const empTasks = deduplicateTaskInstances(empTasksRaw);
+
+        const total = empTasks.length;
+        const completed = empTasks.filter(t => t.completed).length;
+        const percent = total > 0 ? Math.round((completed / total) * 100) : (checkIn ? 100 : 0);
+
+        let tasksHtml = "";
+        if (empTasks.length > 0) {
+            tasksHtml = `<div class="monitor-tasks-list" style="margin-top: 10px; font-size: 0.8rem; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">`;
+            empTasks.forEach(t => {
                 const statusIcon = t.completed ? "✅" : "❌";
                 const color = t.completed ? "#388E3C" : "#d32f2f";
-                const byText = t.completed && t.completed_by_name ? ` (Por: ${t.completed_by_name.split(' ')[0]})` : "";
                 const timeText = t.completed && t.completed_at ? ` [${formatTimeString(t.completed_at)}]` : "";
-                
-                html += `<div style="color: ${color}; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
-                    <span style="font-weight: 600; flex-shrink: 0; font-size: 0.7rem;">${timeText}${byText}</span>
-                </div>`;
+                tasksHtml += `
+                    <div style="color: ${color}; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
+                        <span style="font-weight: 600; flex-shrink: 0; font-size: 0.7rem;">${timeText}</span>
+                    </div>`;
             });
-            html += `</div>`;
+            tasksHtml += `</div>`;
+        } else {
+            tasksHtml = `<div style="margin-top: 10px; font-size: 0.75rem; color: #888; font-style: italic;">Sin misiones individuales registradas.</div>`;
+        }
+
+        const photoSrc = emp.photo || '';
+        const displayName = emp.nickname || emp.name;
+
+        const card = document.createElement('div');
+        card.className = "monitor-card";
+        card.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                <div class="profile-pic-container" style="width: 38px; height: 38px; border-width: 1px;">
+                    <img src="${photoSrc}" alt="Avatar" class="avatar-img" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23888888%22%3E%3Cpath%20d%3D%22M12%202C6.48%202%202%206.48%202%2012s4.48%2010%2010%2010%2010-4.48%2010-10S17.52%202%2012%202zm0%203c1.66%200%203%201.34%203%203s-1.34%203-3%203-3-1.34-3-3%201.34-3%203-3zm0%2014.2c-2.5%200-4.71-1.28-6-3.22.03-1.99%204-3.08%206-3.08%201.99%200%205.97%201.09%206%203.08-1.29%201.94-3.5%203.22-6%203.22z%22%2F%3E%3C%2Fsvg%3E'">
+                </div>
+                <div>
+                    <h4 style="margin:0; font-size:1rem;">${displayName}</h4>
+                    <p class="monitor-meta" style="margin:0; font-size:0.75rem;">${roleLabel} ${shiftLabel ? `(${shiftLabel})` : ''}</p>
+                </div>
+            </div>
             
-            const card = document.createElement('div');
-            card.className = "monitor-card";
-            card.innerHTML = `
-                <h4 style="margin: 0; margin-bottom: 5px;">${role}</h4>
-                <div class="progress-summary" style="margin-top: 10px;">
-                    <div class="progress-text-container">
-                        <span>Completadas (${completed}/${total})</span>
+            ${attHtml}
+
+            ${total > 0 ? `
+                <div class="progress-summary" style="margin-top: 12px;">
+                    <div class="progress-text-container" style="font-size: 0.75rem;">
+                        <span>Misiones (${completed}/${total})</span>
                         <span>${percent}%</span>
                     </div>
-                    <div class="progress-bar-bg">
+                    <div class="progress-bar-bg" style="height: 6px;">
                         <div class="progress-bar-fill" style="width: ${percent}%; background: ${percent === 100 ? '#4CAF50' : (percent > 50 ? '#FF9800' : '#F44336')};"></div>
                     </div>
                 </div>
-                ${html}
-            `;
-            grid.appendChild(card);
+            ` : ''}
+
+            ${tasksHtml}
+        `;
+        grid.appendChild(card);
+    });
+
+    // Render Collaborative tasks card if any
+    const collabTasksRaw = dateTasks.filter(t => t.role_name === 'Colaborativa' || t.is_collaborative);
+    const collabTasks = deduplicateTaskInstances(collabTasksRaw);
+    if (collabTasks.length > 0) {
+        const total = collabTasks.length;
+        const completed = collabTasks.filter(t => t.completed).length;
+        const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
+
+        let collabHtml = `<div class="monitor-tasks-list" style="margin-top: 10px; font-size: 0.8rem; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">`;
+        collabTasks.forEach(t => {
+            const statusIcon = t.completed ? "✅" : "⏳";
+            const color = t.completed ? "#9c27b0" : "#888";
+            const byText = t.completed && t.completed_by_name ? ` (Por: ${t.completed_by_name.split(' ')[0]})` : "";
+            const timeText = t.completed && t.completed_at ? ` [${formatTimeString(t.completed_at)}]` : "";
+            collabHtml += `
+                <div style="color: ${color}; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
+                    <span style="font-weight: 600; flex-shrink: 0; font-size: 0.7rem;">${timeText}${byText}</span>
+                </div>`;
         });
-        
-    } catch(e) {
-        console.error("Error loading historial:", e);
-        grid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1; color: red;">Error al cargar el historial. Intenta nuevamente.</div>';
+        collabHtml += `</div>`;
+
+        const card = document.createElement('div');
+        card.className = "monitor-card";
+        card.style.borderColor = "#9c27b0";
+        card.innerHTML = `
+            <h4 style="margin: 0; color: #9c27b0;">Tareas Colaborativas</h4>
+            <p class="monitor-meta" style="margin-top: 2px;">Todo el día</p>
+            <div class="progress-summary" style="margin-top: 10px;">
+                <div class="progress-text-container" style="font-size: 0.75rem;">
+                    <span>Completadas (${completed}/${total})</span>
+                    <span>${percent}%</span>
+                </div>
+                <div class="progress-bar-bg" style="height: 6px;">
+                    <div class="progress-bar-fill" style="width: ${percent}%; background: linear-gradient(to right, #9c27b0, #e91e63);"></div>
+                </div>
+            </div>
+            ${collabHtml}
+        `;
+        grid.appendChild(card);
     }
 }
 
@@ -2133,27 +2312,41 @@ async function sendPrivateMessage(event) {
         alert("Selecciona un destinatario y escribe un mensaje.");
         return;
     }
+
+    const numRecipientId = parseInt(recipientId, 10);
+    const sender = currentUser.nickname || currentUser.name;
+    const nowIso = new Date().toISOString();
     
     const obj = {
-        sender_name: currentUser.name,
-        recipient_id: recipientId,
+        id: Date.now(),
+        sender_name: sender,
+        recipient_id: numRecipientId,
         message: text,
-        read: false
+        read: false,
+        created_at: nowIso
     };
     
-    // Optional photo upload logic could go here if implemented with Storage.
-    // For now, we just insert the message.
+    // Save to local storage for immediate persistence
+    let localMsgs = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
+    localMsgs.push(obj);
+    localStorage.setItem('roods_private_messages', JSON.stringify(localMsgs));
     
+    showNotification("✉️ Mensaje privado enviado exitosamente.");
+    document.getElementById('privateMessageText').value = "";
+    document.getElementById('privateMessageRecipient').value = "";
+
     if (supabaseClient) {
         try {
-            const { error } = await supabaseClient.from('roods_private_messages').insert(obj);
+            const dbPayload = {
+                sender_name: sender,
+                recipient_id: numRecipientId,
+                message: text,
+                read: false
+            };
+            const { error } = await supabaseClient.from('roods_private_messages').insert(dbPayload);
             if (error) throw error;
-            showNotification("✉️ Mensaje privado enviado exitosamente.");
-            document.getElementById('privateMessageText').value = "";
-            document.getElementById('privateMessageRecipient').value = "";
         } catch(e) {
-            console.error(e);
-            showNotification("Error enviando mensaje.");
+            console.error("Supabase insert error (saved locally):", e);
         }
     }
 }
@@ -3115,8 +3308,11 @@ async function addQuickTask(empId, roleKey, shift, roleName) {
     const isMandatory = check && check.checked ? "Si" : "No";
     const todayStr = formatDateString(new Date());
 
+    const isCollab = (empId === 'collab');
+    const assignedEmpId = isCollab ? null : parseInt(empId, 10);
+
     const newQuickTask = {
-        id: Date.now() + Math.random().toString(36).substr(2, 9),
+        id: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`,
         date: todayStr,
         shift: shift,
         role_name: roleName,
@@ -3129,7 +3325,10 @@ async function addQuickTask(empId, roleKey, shift, roleName) {
         Subtareas: "",
         subtasks_state: [],
         is_urgent: false,
-        urgent_acknowledged: false
+        urgent_acknowledged: false,
+        assigned_employee_id: assignedEmpId,
+        assigned_role: isCollab ? 'Colaborativa' : roleName,
+        is_manual: true
     };
 
     dailyTasks.push(newQuickTask);
@@ -3485,6 +3684,32 @@ function subscribeToAttendance() {
         .subscribe();
 }
 
+function subscribeToPrivateMessages() {
+    if (!supabaseClient) return;
+    
+    supabaseClient
+        .channel('realtime-private-messages')
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'roods_private_messages' },
+            (payload) => {
+                if (typeof pollEmployeeMessages === 'function') pollEmployeeMessages();
+            }
+        )
+        .subscribe();
+
+    supabaseClient
+        .channel('realtime-announcements')
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'roods_announcements' },
+            (payload) => {
+                if (typeof pollEmployeeMessages === 'function') pollEmployeeMessages();
+            }
+        )
+        .subscribe();
+}
+
 // --- APP STARTUP ---
 function initApp() {
     loadLocalDatabase();
@@ -3500,6 +3725,7 @@ function initApp() {
             subscribeToAllDailyTasks();
             subscribeToMuroMessages();
             subscribeToAttendance();
+            subscribeToPrivateMessages();
         } else {
             console.warn("Supabase SDK not loaded. Running in local/offline mode.");
             setSyncIndicator("Offline (Local)", "");

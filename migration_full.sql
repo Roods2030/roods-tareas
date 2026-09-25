@@ -45,3 +45,72 @@ CREATE POLICY "Permitir lectura y escritura a todos (Roles Semanales)" ON public
 ALTER TABLE public.roods_task_templates ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir lectura y escritura a todos (Plantillas)" ON public.roods_task_templates;
 CREATE POLICY "Permitir lectura y escritura a todos (Plantillas)" ON public.roods_task_templates FOR ALL USING (true) WITH CHECK (true);
+
+-- 5. Tabla de Mensajes (Muro de Avisos del Turno)
+CREATE TABLE IF NOT EXISTS public.roods_messages (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    employee_id bigint REFERENCES public.roods_employees(id) ON DELETE SET NULL,
+    employee_name text NOT NULL,
+    message text NOT NULL,
+    timestamp timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.roods_messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura y escritura a todos (Muro Avisos)" ON public.roods_messages;
+CREATE POLICY "Permitir lectura y escritura a todos (Muro Avisos)" ON public.roods_messages FOR ALL USING (true) WITH CHECK (true);
+
+-- 6. Tabla de Mensajes Privados Directos
+CREATE TABLE IF NOT EXISTS public.roods_private_messages (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    sender_name text NOT NULL,
+    recipient_id bigint NOT NULL,
+    message text NOT NULL,
+    photo_url text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    read boolean DEFAULT false NOT NULL
+);
+ALTER TABLE public.roods_private_messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura y escritura a todos (Mensajes Privados)" ON public.roods_private_messages;
+CREATE POLICY "Permitir lectura y escritura a todos (Mensajes Privados)" ON public.roods_private_messages FOR ALL USING (true) WITH CHECK (true);
+
+-- 7. Tabla de Anuncios Globales (Globo)
+CREATE TABLE IF NOT EXISTS public.roods_announcements (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    message text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by_name text NOT NULL,
+    expires_at timestamp with time zone
+);
+ALTER TABLE public.roods_announcements ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura y escritura a todos (Anuncios)" ON public.roods_announcements;
+CREATE POLICY "Permitir lectura y escritura a todos (Anuncios)" ON public.roods_announcements FOR ALL USING (true) WITH CHECK (true);
+
+-- 8. Habilitar Replicación en Tiempo Real (Realtime)
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.roods_daily_tasks;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.roods_attendance;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.roods_messages;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.roods_private_messages;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.roods_announcements;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
