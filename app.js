@@ -319,6 +319,15 @@ async function syncFromCloud() {
                 return merged;
             });
 
+            // Retain any unsynced local tasks (e.g. newly added manual/quick tasks for today or tomorrow)
+            const dbIds = new Set(dbDaily.map(d => String(d.id)));
+            localMap.forEach((localTask, id) => {
+                if (!dbIds.has(String(id)) && localTask.date && localTask.date >= cutoffStr) {
+                    mergedDaily.push(localTask);
+                    mergedToPush.push(localTask);
+                }
+            });
+
             dailyTasks = mergedDaily;
             localStorage.setItem('roods_daily_tasks', JSON.stringify(dailyTasks));
 
@@ -372,7 +381,9 @@ function sanitizeDailyTask(t) {
         Subtareas: t.Subtareas || '',
         subtasks_state: Array.isArray(t.subtasks_state) ? t.subtasks_state : [],
         is_urgent: t.is_urgent ? true : false,
-        urgent_acknowledged: t.urgent_acknowledged ? true : false
+        urgent_acknowledged: t.urgent_acknowledged ? true : false,
+        assigned_employee_id: (t.assigned_employee_id !== null && t.assigned_employee_id !== undefined && t.assigned_employee_id !== '') ? Number(t.assigned_employee_id) : null,
+        assigned_role: t.assigned_role || null
     };
 }
 
@@ -1947,12 +1958,7 @@ async function sendTomorrowTask(event) {
     showNotification("📆 Tarea programada para mañana con éxito.");
     
     if (supabaseClient) {
-        try {
-            const { error } = await supabaseClient.from('roods_daily_tasks').insert(newTomorrowTask);
-            if (error) throw error;
-        } catch (e) {
-            console.error("Failed to insert tomorrow task:", e);
-        }
+        pushToCloudTable('roods_daily_tasks', newTomorrowTask);
     }
     
     renderTomorrowTasks();
@@ -3342,13 +3348,7 @@ async function addQuickTask(empId, roleKey, shift, roleName) {
     renderAdminMonitoreo();
 
     if (supabaseClient) {
-        try {
-            const { error } = await supabaseClient.from('roods_daily_tasks').insert(newQuickTask);
-            if (error) throw error;
-        } catch (e) {
-            console.error("Failed to sync quick task to Supabase:", e);
-            showNotification("⚠️ Tarea agregada localmente (Offline).");
-        }
+        pushToCloudTable('roods_daily_tasks', newQuickTask);
     }
 }
 
