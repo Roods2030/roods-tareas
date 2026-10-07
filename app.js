@@ -1143,10 +1143,14 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
     });
 
     // Individual tasks matching user's active roles or directly assigned to this employee
-    const myTasksRaw = todayTasks.filter(t => 
-        (t.assigned_employee_id && Number(t.assigned_employee_id) === Number(currentUser.id)) ||
-        (!t.assigned_employee_id && isRoleMatch(t.role_name, activeRolesList))
-    );
+    const myTasksRaw = todayTasks.filter(t => {
+        const taskRole = t.assigned_role || t.role_name;
+        const matchesRole = isRoleMatch(taskRole, activeRolesList) || activeRolesList.includes(taskRole);
+        if (t.assigned_employee_id) {
+            return Number(t.assigned_employee_id) === Number(currentUser.id) && matchesRole;
+        }
+        return matchesRole;
+    });
     const myTasks = deduplicateTaskInstances(myTasksRaw);
     
     // Collaborative tasks
@@ -1732,11 +1736,17 @@ function renderAdminMonitoreo() {
 
             // Calculate progress of daily tasks for this role
             const activeRoles = [...sched.roles, sched.roleName, sched.roleKey];
-            const empTasksRaw = dailyTasks.filter(d => 
-                d.date === todayStr && 
-                ((d.assigned_employee_id && Number(d.assigned_employee_id) === Number(emp.id)) ||
-                 (!d.assigned_employee_id && isShiftMatch(d.shift, [sched.shift]) && isRoleMatch(d.role_name, activeRoles)))
-            );
+            const empTasksRaw = dailyTasks.filter(d => {
+                if (d.date !== todayStr) return false;
+                const taskRole = d.assigned_role || d.role_name;
+                const matchesRole = isRoleMatch(taskRole, activeRoles) || taskRole === sched.roleName || taskRole === sched.roleKey;
+                const matchesShift = isShiftMatch(d.shift, [sched.shift]);
+                if (d.assigned_employee_id) {
+                    return Number(d.assigned_employee_id) === Number(emp.id) && matchesRole && matchesShift;
+                } else {
+                    return matchesShift && matchesRole;
+                }
+            });
             
             const empTasks = deduplicateTaskInstances(empTasksRaw);
             
@@ -2136,11 +2146,17 @@ async function renderHistorialTasks() {
         const activeRoles = scheds.flatMap(s => [s.roleName, ...s.roles, s.roleKey]);
         if (checkIn?.role_name) activeRoles.push(checkIn.role_name);
 
-        const empTasksRaw = dateTasks.filter(t => 
-            (t.completed_by_employee_id && Number(t.completed_by_employee_id) === Number(emp.id)) ||
-            (t.assigned_employee_id && Number(t.assigned_employee_id) === Number(emp.id)) ||
-            (!t.assigned_employee_id && isRoleMatch(t.role_name, activeRoles))
-        );
+        const empTasksRaw = dateTasks.filter(t => {
+            const taskRole = t.assigned_role || t.role_name;
+            const matchesRole = isRoleMatch(taskRole, activeRoles) || activeRoles.includes(taskRole);
+            if (t.completed_by_employee_id && Number(t.completed_by_employee_id) === Number(emp.id)) {
+                return true;
+            }
+            if (t.assigned_employee_id && Number(t.assigned_employee_id) === Number(emp.id)) {
+                return matchesRole;
+            }
+            return !t.assigned_employee_id && matchesRole;
+        });
         const empTasks = deduplicateTaskInstances(empTasksRaw);
 
         const total = empTasks.length;
