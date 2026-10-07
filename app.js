@@ -557,7 +557,7 @@ function login() {
     } else {
         showSection('employeeSection');
         initEmployeeView();
-        showKruBannerModal('kru_welcome.png', '¡Comenzar Misión! 🚀');
+        showKruBannerModal('kru_welcome.png?v=2', '¡Comenzar Misión! 🚀');
     }
     showNotification(`🔓 Bienvenido, ${currentUser.name}`);
 }
@@ -1621,7 +1621,7 @@ function showKruBannerModal(imageSrc, buttonText) {
 }
 
 function showKruWelcomeModal() {
-    showKruBannerModal('kru_welcome.png', '¡Comenzar Misión! 🚀');
+    showKruBannerModal('kru_welcome.png?v=2', '¡Comenzar Misión! 🚀');
 }
 
 function dismissKruWelcomeModal() {
