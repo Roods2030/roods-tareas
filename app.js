@@ -57,6 +57,13 @@ const ROODS_ROLES = {
         hours: '14:30 - 17:00',
         taskRoles: ['Coci', 'Apoyo Cocina', 'Apoyo']
     },
+    'apoyoMkt': {
+        key: 'apoyoMkt',
+        name: 'Apoyo MKT',
+        shift: 'Matutino',
+        hours: '14:30 - 17:00',
+        taskRoles: ['Apoyo MKT', 'Marketing', 'MKT']
+    },
     'apoyoGeneral': {
         key: 'apoyoGeneral',
         name: 'Apoyo General',
@@ -2449,6 +2456,7 @@ function renderAdminWeeklyRoles() {
         'roleVespertinoCocina',
         'roleAuxAdministrativo',
         'roleApoyoCocina',
+        'roleApoyoMkt',
         'roleApoyoGeneral'
     ];
     
@@ -2481,6 +2489,7 @@ function getRoleKeyFromSelectId(id) {
     if (id === 'roleVespertinoCocina') return 'vespertinoCocina';
     if (id === 'roleAuxAdministrativo') return 'auxAdministrativo';
     if (id === 'roleApoyoCocina') return 'apoyoCocina';
+    if (id === 'roleApoyoMkt') return 'apoyoMkt';
     if (id === 'roleApoyoGeneral') return 'apoyoGeneral';
     return '';
 }
@@ -2504,6 +2513,7 @@ function saveWeeklyRoles() {
         'roleVespertinoCocina',
         'roleAuxAdministrativo',
         'roleApoyoCocina',
+        'roleApoyoMkt',
         'roleApoyoGeneral'
     ];
     

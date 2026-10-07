@@ -264,6 +264,10 @@
                                         <option value="Cajero">Rol: Cajero</option>
                                         <option value="Barista">Rol: Barista</option>
                                         <option value="Cocina">Rol: Cocina</option>
+                                        <option value="Aux. Administrativo">Rol: Aux. Administrativo</option>
+                                        <option value="Coci">Rol: Coci</option>
+                                        <option value="Apoyo MKT">Rol: Apoyo MKT</option>
+                                        <option value="Apoyo General">Rol: Apoyo General</option>
                                     </select>
                                 </div>
                                 <div class="form-group" style="margin-bottom: 15px;">
@@ -435,6 +439,10 @@
                                 <select id="roleApoyoCocina" class="form-control" onchange="saveWeeklyRoles()"></select>
                             </div>
                             <div class="form-group">
+                                <label for="roleApoyoMkt">Apoyo MKT (14:30 - 17:00):</label>
+                                <select id="roleApoyoMkt" class="form-control" onchange="saveWeeklyRoles()"></select>
+                            </div>
+                            <div class="form-group">
                                 <label for="roleApoyoGeneral">Apoyo General (12:00 - 22:30):</label>
                                 <select id="roleApoyoGeneral" class="form-control" onchange="saveWeeklyRoles()"></select>
                             </div>
@@ -462,6 +470,7 @@
                                 <option value="CociBari">CociBari</option>
                                 <option value="Aux. Administrativo">Aux. Administrativo</option>
                                 <option value="Apoyo General">Apoyo General</option>
+                                <option value="Apoyo MKT">Apoyo MKT</option>
                                 <option value="Coci">Coci</option>
                                 <option value="Colaborativa">Colaborativa (Todos)</option>
                             </select>
@@ -609,6 +618,7 @@
                         <option value="Aux. Administrativo">Aux. Administrativo</option>
                         <option value="Coci">Coci</option>
                         <option value="Apoyo General">Apoyo General</option>
+                        <option value="Apoyo MKT">Apoyo MKT</option>
                         
                         <!-- Colaborativo -->
                         <option value="Colaborativa">Colaborativa (Ambos/Todos)</option>
@@ -686,7 +696,7 @@
     <!-- Supabase SDK (loaded locally to prevent CDN/blockage issues) -->
     <script src="supabase.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.0.46"></script>
+    <script src="app.js?v=1.0.47"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
