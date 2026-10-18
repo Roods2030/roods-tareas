@@ -248,12 +248,26 @@ async function syncFromCloud() {
             localStorage.setItem('roods_weekly_roles', JSON.stringify(weeklyRoles));
         }
 
-        // 3. Sync Attendance
+        // 3. Sync Attendance (Smart merge to prevent wiping fresh local logs)
         const { data: dbAtt, error: errAtt } = await supabaseClient.from('roods_attendance').select('*');
         if (errAtt) throw errAtt;
         if (dbAtt) {
-            attendanceLogs = dbAtt;
+            const attMap = new Map();
+            dbAtt.forEach(a => {
+                if (a && a.id) attMap.set(String(a.id), a);
+            });
+            const unpushed = [];
+            attendanceLogs.forEach(a => {
+                if (a && a.id && !attMap.has(String(a.id))) {
+                    attMap.set(String(a.id), a);
+                    unpushed.push(a);
+                }
+            });
+            attendanceLogs = Array.from(attMap.values());
             localStorage.setItem('roods_attendance', JSON.stringify(attendanceLogs));
+            if (unpushed.length > 0) {
+                pushToCloudTable('roods_attendance', unpushed);
+            }
         }
 
         // 4. Sync Swaps
@@ -569,6 +583,7 @@ function login() {
     if (currentUser.is_admin) {
         showSection('adminSection');
         initAdminView();
+        if (typeof syncFromCloud === 'function') syncFromCloud();
     } else {
         showSection('employeeSection');
         initEmployeeView();
@@ -744,9 +759,24 @@ function findRoleAttendance(userLogs, sched, schedulesLength) {
     };
 
     const roleLogs = userLogs.filter(l => isMatch(l.role_name));
-    const checkIn = roleLogs.find(l => l.type === 'entrada');
-    const checkOut = roleLogs.find(l => l.type === 'salida');
-    return { checkIn, checkOut };
+    
+    // Sort chronologically by timestamp or id
+    const sorted = [...roleLogs].sort((a, b) => {
+        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : (Number(a.id) || 0);
+        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : (Number(b.id) || 0);
+        return timeA - timeB;
+    });
+
+    const checkIn = [...sorted].reverse().find(l => l.type === 'entrada');
+    const checkOut = [...sorted].reverse().find(l => l.type === 'salida');
+
+    const checkInTime = checkIn ? (checkIn.timestamp ? new Date(checkIn.timestamp).getTime() : (Number(checkIn.id) || 0)) : 0;
+    const checkOutTime = checkOut ? (checkOut.timestamp ? new Date(checkOut.timestamp).getTime() : (Number(checkOut.id) || 0)) : 0;
+
+    const isCurrentlyCheckedIn = Boolean(checkIn && (!checkOut || checkInTime > checkOutTime));
+    const isCurrentlyCheckedOut = Boolean(checkIn && checkOut && checkOutTime >= checkInTime);
+
+    return { checkIn, checkOut, isCurrentlyCheckedIn, isCurrentlyCheckedOut };
 }
 
 // Attendance Logs checks
@@ -761,15 +791,17 @@ function updateAttendanceUI(today, schedules) {
 
     // Find all attendance logs for this user today
     const userTodayLogs = attendanceLogs.filter(l => 
-        l.employee_id === currentUser.id && 
+        Number(l.employee_id) === Number(currentUser.id) && 
         l.date === todayStr
     );
 
     let isAnyActive = false;
+    let isAnyFinished = false;
     let activeRolesList = [];
+    let finishedRolesList = [];
 
     schedules.forEach(sched => {
-        const { checkIn, checkOut } = findRoleAttendance(userTodayLogs, sched, schedules.length);
+        const { checkIn, checkOut, isCurrentlyCheckedIn, isCurrentlyCheckedOut } = findRoleAttendance(userTodayLogs, sched, schedules.length);
 
         // Create HTML row for this shift
         const shiftRow = document.createElement('div');
@@ -786,16 +818,8 @@ function updateAttendanceUI(today, schedules) {
         let actionBtnHtml = "";
         const kiosk = isKioskDevice();
 
-        if (!checkIn) {
-            // Not checked in
-            statusText = `<span style="font-size:0.85rem; color:var(--text-secondary);">⏳ Horario: ${sched.hours}</span>`;
-            if (kiosk) {
-                actionBtnHtml = `<button class="btn-primary" onclick="performCheckIn('${sched.roleKey}')" style="padding: 6px 14px; font-size:0.85rem; border:none; border-radius:8px;">Entrada 📥</button>`;
-            } else {
-                actionBtnHtml = `<span style="font-size:0.75rem; color:#c62828; font-weight:700; background:rgba(211,47,47,0.08); padding:5px 9px; border-radius:6px; border:1px solid rgba(211,47,47,0.2); display:inline-block;">📱 Checar en Tablet</span>`;
-            }
-        } else if (checkIn && !checkOut) {
-            // Active
+        if (isCurrentlyCheckedIn) {
+            // Active shift
             isAnyActive = true;
             activeRolesList = activeRolesList.concat(sched.roles);
             activeRolesList.push(sched.roleName);
@@ -806,10 +830,22 @@ function updateAttendanceUI(today, schedules) {
             } else {
                 actionBtnHtml = `<span style="font-size:0.75rem; color:#c62828; font-weight:700; background:rgba(211,47,47,0.08); padding:5px 9px; border-radius:6px; border:1px solid rgba(211,47,47,0.2); display:inline-block;">📱 Salida en Tablet</span>`;
             }
-        } else {
+        } else if (isCurrentlyCheckedOut) {
             // Checked out
-            statusText = `<span style="font-size:0.85rem; color:var(--text-light); text-decoration: line-through;">🏁 Salida: ${checkOut.time} (Terminado)</span>`;
+            isAnyFinished = true;
+            finishedRolesList = finishedRolesList.concat(sched.roles);
+            finishedRolesList.push(sched.roleName);
+            finishedRolesList.push(sched.roleKey);
+            statusText = `<span style="font-size:0.85rem; color:var(--text-light); text-decoration: line-through;">🏁 Salida: ${checkOut.time} (Concluido)</span>`;
             actionBtnHtml = `<span style="font-size: 1.25rem;">✅</span>`;
+        } else {
+            // Not checked in yet
+            statusText = `<span style="font-size:0.85rem; color:var(--text-secondary);">⏳ Horario: ${sched.hours}</span>`;
+            if (kiosk) {
+                actionBtnHtml = `<button class="btn-primary" onclick="performCheckIn('${sched.roleKey}')" style="padding: 6px 14px; font-size:0.85rem; border:none; border-radius:8px;">Entrada 📥</button>`;
+            } else {
+                actionBtnHtml = `<span style="font-size:0.75rem; color:#c62828; font-weight:700; background:rgba(211,47,47,0.08); padding:5px 9px; border-radius:6px; border:1px solid rgba(211,47,47,0.2); display:inline-block;">📱 Checar en Tablet</span>`;
+            }
         }
 
         shiftRow.innerHTML = `
@@ -824,7 +860,7 @@ function updateAttendanceUI(today, schedules) {
         shiftsContainer.appendChild(shiftRow);
     });
 
-    // Update global status dot
+    // Update global status dot & tasks container
     if (isAnyActive) {
         statusDot.className = "status-indicator-dot active";
         container.classList.remove('locked');
@@ -836,6 +872,14 @@ function updateAttendanceUI(today, schedules) {
 
         // Render combined active checklists
         renderChecklistsForRoles(todayStr, activeRolesList, schedules);
+    } else if (isAnyFinished) {
+        // Shift completed! Keep completed tasks visible and show celebratory completion message
+        statusDot.className = "status-indicator-dot";
+        container.classList.remove('locked');
+        shiftsContainer.innerHTML += `<p class="attendance-message" style="margin-top: 10px; font-size: 0.85rem; color: #2E7D32; font-weight: 600; background: rgba(56, 142, 60, 0.1); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(56, 142, 60, 0.2);">🏁 ¡Jornada concluida! Salida registrada exitosamente. Buen descanso.</p>`;
+        
+        // Render checklists so completed tasks stay visible in review mode
+        renderChecklistsForRoles(todayStr, finishedRolesList, schedules);
     } else {
         statusDot.className = "status-indicator-dot";
         container.classList.add('locked');
@@ -1224,15 +1268,15 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
 function renderChecklists(dateStr, schedule) {
     const today = new Date();
     const schedules = resolveTodaySchedules(currentUser.id, today);
-    // Find active roles
+    // Find active or completed roles
     const userTodayLogs = attendanceLogs.filter(l => 
-        l.employee_id === currentUser.id && 
+        Number(l.employee_id) === Number(currentUser.id) && 
         l.date === dateStr
     );
     let activeRolesList = [];
     schedules.forEach(sched => {
-        const { checkIn, checkOut } = findRoleAttendance(userTodayLogs, sched, schedules.length);
-        if (checkIn && !checkOut) {
+        const { isCurrentlyCheckedIn, isCurrentlyCheckedOut } = findRoleAttendance(userTodayLogs, sched, schedules.length);
+        if (isCurrentlyCheckedIn || isCurrentlyCheckedOut) {
             activeRolesList = activeRolesList.concat(sched.roles);
             activeRolesList.push(sched.roleName);
             activeRolesList.push(sched.roleKey);
@@ -1690,10 +1734,16 @@ function switchAdminTab(tabId) {
     if (activeContent) activeContent.classList.add('active');
 
     // Run tab-specific loading logic
-    if (tabId === 'monitoreo') renderAdminMonitoreo();
+    if (tabId === 'monitoreo') {
+        renderAdminMonitoreo();
+        if (typeof syncFromCloud === 'function') syncFromCloud();
+    }
     if (tabId === 'historial') renderHistorialTasks();
     if (tabId === 'comunicados') renderAdminComunicados();
-    if (tabId === 'asistencia') renderAdminAttendance();
+    if (tabId === 'asistencia') {
+        renderAdminAttendance();
+        if (typeof syncFromCloud === 'function') syncFromCloud();
+    }
     if (tabId === 'roles') renderAdminWeeklyRoles();
     if (tabId === 'tareas-csv') renderAdminCsvView();
     if (tabId === 'empleados') renderAdminEmployees();
@@ -1749,17 +1799,16 @@ function renderAdminMonitoreo() {
         empSchedules.forEach(sched => {
             hasScheduled = true;
             
-            // Check check-in/out status for this specific role (robust role matching)
-            const userLogs = todayEntries.filter(l => l.employee_id === emp.id);
-            const checkIn = userLogs.find(l => l.type === 'entrada' && (l.role_name === sched.roleName || isRoleMatch(l.role_name, [sched.roleName, ...sched.roles])));
-            const checkOut = userLogs.find(l => l.type === 'salida' && (l.role_name === sched.roleName || isRoleMatch(l.role_name, [sched.roleName, ...sched.roles]) || userLogs.some(x => x.type === 'salida')));
+            // Check check-in/out status for this specific role (robust role matching & latest status)
+            const userLogs = todayEntries.filter(l => Number(l.employee_id) === Number(emp.id));
+            const { checkIn, checkOut, isCurrentlyCheckedIn, isCurrentlyCheckedOut } = findRoleAttendance(userLogs, sched, empSchedules.length);
 
-            let attendanceStatus = '<span class="text-orange">Pendiente de entrar</span>';
-            if (checkIn && !checkOut) {
-                attendanceStatus = `<span class="text-green">Activo (Entrada: ${checkIn.time})</span>`;
-            } else if (checkOut) {
-                const entryTimeStr = checkIn ? checkIn.time : (userLogs.find(l => l.type === 'entrada')?.time || '--');
-                attendanceStatus = `<span>Salió (Entrada: ${entryTimeStr} | Salida: ${checkOut.time})</span>`;
+            let attendanceStatus = '<span class="text-orange">⏳ Pendiente de entrar</span>';
+            if (isCurrentlyCheckedIn) {
+                attendanceStatus = `<span class="text-green">🟢 Activo (Entrada: ${checkIn.time})</span>`;
+            } else if (isCurrentlyCheckedOut) {
+                const entryTimeStr = checkIn ? checkIn.time : '--';
+                attendanceStatus = `<span style="color:#666; font-weight:600;">🏁 Salió (Entrada: ${entryTimeStr} | Salida: ${checkOut.time})</span>`;
             }
 
             // Calculate progress of daily tasks for this role
@@ -2141,8 +2190,13 @@ async function renderHistorialTasks() {
 
     relevantEmployees.forEach(emp => {
         const empLogs = dateAttendance.filter(l => Number(l.employee_id) === Number(emp.id));
-        const checkIn = empLogs.find(l => l.type === 'entrada');
-        const checkOut = empLogs.find(l => l.type === 'salida');
+        const sortedEmpLogs = [...empLogs].sort((a, b) => {
+            const timeA = a.timestamp ? new Date(a.timestamp).getTime() : (Number(a.id) || 0);
+            const timeB = b.timestamp ? new Date(b.timestamp).getTime() : (Number(b.id) || 0);
+            return timeA - timeB;
+        });
+        const checkIn = sortedEmpLogs.find(l => l.type === 'entrada');
+        const checkOut = [...sortedEmpLogs].reverse().find(l => l.type === 'salida');
 
         const scheds = resolveTodaySchedules(emp.id, targetDateObj);
         const roleLabel = checkIn?.role_name || (scheds.length > 0 ? scheds.map(s => s.roleDisplay).join(', ') : 'Colaborador');
@@ -3199,15 +3253,15 @@ function refreshEmployeeTasksUI() {
     const todayStr = formatDateString(today);
     const schedules = resolveTodaySchedules(currentUser.id, today);
     
-    // Build active roles list from currently checked-in shifts
+    // Build active or completed roles list from shifts
     const userTodayLogs = attendanceLogs.filter(l => 
-        l.employee_id === currentUser.id && 
+        Number(l.employee_id) === Number(currentUser.id) && 
         l.date === todayStr
     );
     let activeRolesList = [];
     schedules.forEach(sched => {
-        const { checkIn, checkOut } = findRoleAttendance(userTodayLogs, sched, schedules.length);
-        if (checkIn && !checkOut) {
+        const { isCurrentlyCheckedIn, isCurrentlyCheckedOut } = findRoleAttendance(userTodayLogs, sched, schedules.length);
+        if (isCurrentlyCheckedIn || isCurrentlyCheckedOut) {
             activeRolesList = activeRolesList.concat(sched.roles);
             activeRolesList.push(sched.roleName);
             activeRolesList.push(sched.roleKey);
