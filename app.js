@@ -358,6 +358,9 @@ async function syncFromCloud() {
 
         // Refresh UI with synced data
         if (currentUser) {
+            const freshUser = employees.find(e => e.id === currentUser.id);
+            if (freshUser) currentUser = freshUser;
+            
             if (currentUser.is_admin) {
                 if (currentAdminTab === 'monitoreo') renderAdminMonitoreo();
                 if (currentAdminTab === 'asistencia') renderAdminAttendance();
@@ -499,7 +502,7 @@ function hideNotification() {
 
 // --- PIN Numeric Pad Logic ---
 function pressPin(num) {
-    if (currentPIN.length < 4) {
+    if (currentPIN.length < 6) {
         currentPIN += num;
         updatePinDisplay();
     }
@@ -507,9 +510,13 @@ function pressPin(num) {
     // Check if the current pin matches any employee pin (dynamic length auto-login)
     const matched = employees.find(e => e.pin === currentPIN);
     if (matched) {
-        setTimeout(login, 200);
-    } else if (currentPIN.length === 4) {
-        // If they entered 6 digits and no match was found, trigger login to show error
+        setTimeout(login, 150);
+        return;
+    }
+
+    // Check if any employee pin starts with currentPIN
+    const canMatchAny = employees.some(e => e.pin && e.pin.startsWith(currentPIN));
+    if ((currentPIN.length >= 4 && !canMatchAny) || currentPIN.length >= 6) {
         setTimeout(login, 200);
     }
 }
@@ -525,7 +532,7 @@ function backspacePin() {
 }
 
 function updatePinDisplay() {
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 6; i++) {
         const dot = document.getElementById(`dot${i}`);
         if (dot) {
             if (i <= currentPIN.length) {
@@ -539,7 +546,8 @@ function updatePinDisplay() {
 
 // --- Authentication & Login ---
 function login() {
-    const matched = employees.find(e => e.pin === currentPIN);
+    const enteredPin = currentPIN;
+    const matched = employees.find(e => e.pin === enteredPin);
     currentPIN = ""; // reset
     updatePinDisplay();
 
@@ -549,6 +557,13 @@ function login() {
     }
 
     currentUser = matched;
+    
+    // Persist session to prevent losing login when mobile tab sleeps or reloads
+    try {
+        localStorage.setItem('roods_active_session', JSON.stringify({ id: currentUser.id, pin: currentUser.pin }));
+    } catch (e) {
+        console.warn("Could not save session to localStorage:", e);
+    }
     
     // Navigate based on Role
     if (currentUser.is_admin) {
@@ -565,6 +580,9 @@ function login() {
 function logout() {
     currentUser = null;
     currentPIN = "";
+    try {
+        localStorage.removeItem('roods_active_session');
+    } catch (e) {}
     updatePinDisplay();
     showSection('loginSection');
 }
@@ -715,6 +733,22 @@ function resolveRolesList(roleDisplay) {
     return matched ? matched.taskRoles : [];
 }
 
+// Attendance Logs helper for unified role and alias matching
+function findRoleAttendance(userLogs, sched, schedulesLength) {
+    const isMatch = (logRole) => {
+        if (!logRole) return schedulesLength === 1;
+        if (logRole === sched.roleName) return true;
+        if (sched.roles && sched.roles.includes(logRole)) return true;
+        if (typeof isRoleMatch === 'function' && isRoleMatch(logRole, [sched.roleName, ...(sched.roles || [])])) return true;
+        return false;
+    };
+
+    const roleLogs = userLogs.filter(l => isMatch(l.role_name));
+    const checkIn = roleLogs.find(l => l.type === 'entrada');
+    const checkOut = roleLogs.find(l => l.type === 'salida');
+    return { checkIn, checkOut };
+}
+
 // Attendance Logs checks
 function updateAttendanceUI(today, schedules) {
     const todayStr = formatDateString(today);
@@ -735,14 +769,7 @@ function updateAttendanceUI(today, schedules) {
     let activeRolesList = [];
 
     schedules.forEach(sched => {
-        // Find logs specifically for this role
-        const roleLogs = userTodayLogs.filter(l => 
-            l.role_name === sched.roleName || 
-            (userTodayLogs.length > 0 && !l.role_name && schedules.length === 1)
-        );
-
-        const checkIn = roleLogs.find(l => l.type === 'entrada');
-        const checkOut = roleLogs.find(l => l.type === 'salida');
+        const { checkIn, checkOut } = findRoleAttendance(userTodayLogs, sched, schedules.length);
 
         // Create HTML row for this shift
         const shiftRow = document.createElement('div');
@@ -1204,8 +1231,7 @@ function renderChecklists(dateStr, schedule) {
     );
     let activeRolesList = [];
     schedules.forEach(sched => {
-        const checkIn = userTodayLogs.find(l => l.role_name === sched.roleName && l.type === 'entrada');
-        const checkOut = userTodayLogs.find(l => l.role_name === sched.roleName && l.type === 'salida');
+        const { checkIn, checkOut } = findRoleAttendance(userTodayLogs, sched, schedules.length);
         if (checkIn && !checkOut) {
             activeRolesList = activeRolesList.concat(sched.roles);
             activeRolesList.push(sched.roleName);
@@ -1343,17 +1369,18 @@ function toggleMainTask(taskId, isCollab) {
     const newCompletedState = !taskObj.completed;
     
     // For collaborative tasks, sync across all collaborative instances for today.
-    // For individual tasks, target only this specific task instance (d.id === taskId).
+    // For individual tasks, target this specific task and any duplicate instances for the same role and date
     const matches = (taskObj.role_name === 'Colaborativa' || isCollab)
         ? dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name && d.role_name === 'Colaborativa')
-        : dailyTasks.filter(d => d.id === taskId);
+        : dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name && (d.id === taskId || (taskObj.role_name && isRoleMatch(d.role_name, [taskObj.role_name]))));
     
+    const nowIso = new Date().toISOString();
     matches.forEach(task => {
         task.completed = newCompletedState;
         if (task.completed) {
             task.completed_by_employee_id = currentUser.id;
             task.completed_by_name = currentUser.name;
-            task.completed_at = new Date().toISOString();
+            task.completed_at = nowIso;
             if (task.subtasks_state) {
                 task.subtasks_state.forEach(s => s.completed = true);
             }
@@ -1385,8 +1412,9 @@ function toggleSubtask(taskId, subIdx, isChecked, isCollab) {
 
     const matches = (taskObj.role_name === 'Colaborativa' || isCollab)
         ? dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name && d.role_name === 'Colaborativa')
-        : dailyTasks.filter(d => d.id === taskId);
+        : dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name && (d.id === taskId || (taskObj.role_name && isRoleMatch(d.role_name, [taskObj.role_name]))));
 
+    const nowIso = new Date().toISOString();
     matches.forEach(task => {
         if (!task.subtasks_state || !task.subtasks_state[subIdx]) return;
         task.subtasks_state[subIdx].completed = isChecked;
@@ -1396,7 +1424,7 @@ function toggleSubtask(taskId, subIdx, isChecked, isCollab) {
             task.completed = true;
             task.completed_by_employee_id = currentUser.id;
             task.completed_by_name = currentUser.name;
-            task.completed_at = new Date().toISOString();
+            task.completed_at = nowIso;
         } else {
             task.completed = false;
             task.completed_by_employee_id = null;
@@ -3178,8 +3206,7 @@ function refreshEmployeeTasksUI() {
     );
     let activeRolesList = [];
     schedules.forEach(sched => {
-        const checkIn = userTodayLogs.find(l => l.role_name === sched.roleName && l.type === 'entrada');
-        const checkOut = userTodayLogs.find(l => l.role_name === sched.roleName && l.type === 'salida');
+        const { checkIn, checkOut } = findRoleAttendance(userTodayLogs, sched, schedules.length);
         if (checkIn && !checkOut) {
             activeRolesList = activeRolesList.concat(sched.roles);
             activeRolesList.push(sched.roleName);
@@ -3203,22 +3230,7 @@ function subscribeToAllDailyTasks() {
                     const newTask = payload.new;
                     if (!newTask) return;
                     
-                    const mappedTask = {
-                        id: newTask.id,
-                        date: newTask.date,
-                        shift: newTask.shift,
-                        task_name: newTask.task_name,
-                        role_name: newTask.role_name,
-                        completed: newTask.completed,
-                        completed_by_employee_id: newTask.completed_by_employee_id,
-                        completed_by_name: newTask.completed_by_name,
-                        completed_at: newTask.completed_at,
-                        Imprescindible: newTask.Imprescindible || 'No',
-                        Subtareas: newTask.Subtareas || '',
-                        subtasks_state: newTask.subtasks_state || [],
-                        is_urgent: newTask.is_urgent || false,
-                        urgent_acknowledged: newTask.urgent_acknowledged || false
-                    };
+                    const mappedTask = sanitizeDailyTask(newTask);
                     
                     if (!dailyTasks.some(d => d.id === mappedTask.id)) {
                         dailyTasks.push(mappedTask);
@@ -3241,22 +3253,7 @@ function subscribeToAllDailyTasks() {
                     const updatedTask = payload.new;
                     if (!updatedTask) return;
                     
-                    const mappedTask = {
-                        id: updatedTask.id,
-                        date: updatedTask.date,
-                        shift: updatedTask.shift,
-                        task_name: updatedTask.task_name,
-                        role_name: updatedTask.role_name,
-                        completed: updatedTask.completed,
-                        completed_by_employee_id: updatedTask.completed_by_employee_id,
-                        completed_by_name: updatedTask.completed_by_name,
-                        completed_at: updatedTask.completed_at,
-                        Imprescindible: updatedTask.Imprescindible || 'No',
-                        Subtareas: updatedTask.Subtareas || '',
-                        subtasks_state: updatedTask.subtasks_state || [],
-                        is_urgent: updatedTask.is_urgent || false,
-                        urgent_acknowledged: updatedTask.urgent_acknowledged || false
-                    };
+                    const mappedTask = sanitizeDailyTask(updatedTask);
                     
                     const idx = dailyTasks.findIndex(d => d.id === mappedTask.id);
                     if (idx > -1) {
@@ -3741,6 +3738,27 @@ function initApp() {
     loadLocalDatabase();
     startClock();
     updateKioskUI();
+
+    // Restore active session if present (prevents user from being kicked out on reload/sleep)
+    try {
+        const savedSession = localStorage.getItem('roods_active_session');
+        if (savedSession) {
+            const parsed = JSON.parse(savedSession);
+            const foundEmp = employees.find(e => e.id === parsed.id || (parsed.pin && e.pin === parsed.pin));
+            if (foundEmp) {
+                currentUser = foundEmp;
+                if (currentUser.is_admin) {
+                    showSection('adminSection');
+                    initAdminView();
+                } else {
+                    showSection('employeeSection');
+                    initEmployeeView();
+                }
+            }
+        }
+    } catch (e) {
+        console.warn("Could not restore session:", e);
+    }
     
     // Initialize Supabase from statically loaded local SDK
     try {
