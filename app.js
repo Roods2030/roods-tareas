@@ -1246,7 +1246,8 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
         </div>`;
     } else {
         myTasks.forEach(task => {
-            const item = createTaskItemElement(task, false);
+            const isReadOnly = isEmployeeShiftCompletedForTask(task);
+            const item = createTaskItemElement(task, false, isReadOnly);
             myTasksList.appendChild(item);
         });
     }
@@ -1256,7 +1257,8 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
         collabTasksList.innerHTML = '<div class="empty-state"><span class="empty-state-icon">📋</span>No hay tareas colaborativas asignadas para tus turnos hoy</div>';
     } else {
         collabTasks.forEach(task => {
-            const item = createTaskItemElement(task, true);
+            const isReadOnly = isEmployeeShiftCompletedForTask(task);
+            const item = createTaskItemElement(task, true, isReadOnly);
             collabTasksList.appendChild(item);
         });
     }
@@ -1285,9 +1287,61 @@ function renderChecklists(dateStr, schedule) {
     renderChecklistsForRoles(dateStr, activeRolesList, schedules);
 }
 
-function createTaskItemElement(task, isCollab) {
+// Check if a task is locked against modifications because employee's shift has checked out
+function isEmployeeShiftCompletedForTask(task) {
+    if (!currentUser || currentUser.is_admin) return false;
+    if (!task) return false;
+
+    const today = new Date();
+    const todayStr = formatDateString(today);
+
+    // Past or future dates cannot be modified by employees
+    if (task.date && task.date !== todayStr) return true;
+
+    const schedules = resolveTodaySchedules(currentUser.id, today);
+    if (schedules.length === 0) return true;
+
+    const userTodayLogs = attendanceLogs.filter(l => 
+        Number(l.employee_id) === Number(currentUser.id) && 
+        l.date === todayStr
+    );
+
+    // If all today's schedules are finished (checked out), everything is locked
+    const allCheckedOut = schedules.every(sched => {
+        const att = findRoleAttendance(userTodayLogs, sched, schedules.length);
+        return att.isCurrentlyCheckedOut;
+    });
+    if (allCheckedOut) return true;
+
+    // If it's a collaborative task, check if employee currently has ANY active shift
+    if (task.role_name === 'Colaborativa') {
+        const hasActiveShift = schedules.some(sched => {
+            const att = findRoleAttendance(userTodayLogs, sched, schedules.length);
+            return att.isCurrentlyCheckedIn;
+        });
+        return !hasActiveShift;
+    }
+
+    // For individual tasks, find the matching schedule for this role
+    const matchingSched = schedules.find(s => 
+        s.roleName === task.role_name || 
+        (s.roles && s.roles.includes(task.role_name)) ||
+        isRoleMatch(task.role_name, [s.roleName, ...(s.roles || [])])
+    );
+
+    if (matchingSched) {
+        const att = findRoleAttendance(userTodayLogs, matchingSched, schedules.length);
+        if (att.isCurrentlyCheckedOut) return true; // Already checked out of this shift
+        if (!att.isCurrentlyCheckedIn) return true; // Not checked in yet
+        return false;
+    }
+
+    return false;
+}
+
+function createTaskItemElement(task, isCollab, isReadOnly = false) {
     const item = document.createElement('div');
-    item.className = `task-item ${task.completed ? 'completed' : ''}`;
+    item.className = `task-item ${task.completed ? 'completed' : ''} ${isReadOnly ? 'read-only' : ''}`;
     item.style.flexDirection = "column";
     item.style.alignItems = "stretch";
     
@@ -1306,14 +1360,15 @@ function createTaskItemElement(task, isCollab) {
             metaText += ` | ⚠️ Imprescindible`;
         }
     }
+    if (isReadOnly) {
+        metaText += ` | 🔒 Salida registrada (Lectura)`;
+    }
 
     const hasSubtasks = task.subtasks_state && task.subtasks_state.length > 0;
     const completedCount = hasSubtasks ? task.subtasks_state.filter(s => s.completed).length : 0;
     const subtaskSummary = hasSubtasks 
         ? ` (${completedCount}/${task.subtasks_state.length})`
         : "";
-
-
 
     item.innerHTML = `
         <div class="task-main-row" style="display: flex; align-items: center; width: 100%;">
@@ -1332,11 +1387,21 @@ function createTaskItemElement(task, isCollab) {
     const textContainer = item.querySelector('.task-text-container');
     const chevron = item.querySelector('.chevron-icon');
 
-    // Click on checkbox toggles the whole task
-    checkbox.onclick = (e) => {
-        e.stopPropagation();
-        toggleMainTask(task.id, isCollab);
-    };
+    if (isReadOnly) {
+        checkbox.style.cursor = "not-allowed";
+        checkbox.style.opacity = "0.7";
+        checkbox.title = "Turno concluido. No se pueden modificar tareas tras checar salida.";
+        checkbox.onclick = (e) => {
+            e.stopPropagation();
+            showNotification("🔒 Tu turno ya concluyó. No es posible modificar tareas tras checar salida.", 3500);
+        };
+    } else {
+        // Click on checkbox toggles the whole task
+        checkbox.onclick = (e) => {
+            e.stopPropagation();
+            toggleMainTask(task.id, isCollab);
+        };
+    }
 
     if (hasSubtasks) {
         // Create subtasks container
@@ -1365,15 +1430,22 @@ function createTaskItemElement(task, isCollab) {
             subItem.style.color = "var(--text-secondary)";
 
             subItem.innerHTML = `
-                <input type="checkbox" ${sub.completed ? 'checked' : ''} style="accent-color: var(--primary-gradient-start); width: 16px; height: 16px; cursor: pointer;">
+                <input type="checkbox" ${sub.completed ? 'checked' : ''} ${isReadOnly ? 'disabled' : ''} style="accent-color: var(--primary-gradient-start); width: 16px; height: 16px; cursor: ${isReadOnly ? 'not-allowed' : 'pointer'};">
                 <span style="${sub.completed ? 'text-decoration: line-through; color: var(--text-light);' : ''}">${sub.name}</span>
             `;
 
             const subCheckbox = subItem.querySelector('input');
-            subCheckbox.onchange = (e) => {
-                e.stopPropagation();
-                toggleSubtask(task.id, subIdx, subCheckbox.checked, isCollab);
-            };
+            if (isReadOnly) {
+                subCheckbox.onclick = (e) => {
+                    e.stopPropagation();
+                    showNotification("🔒 Tu turno ya concluyó. No es posible modificar tareas tras checar salida.", 3500);
+                };
+            } else {
+                subCheckbox.onchange = (e) => {
+                    e.stopPropagation();
+                    toggleSubtask(task.id, subIdx, subCheckbox.checked, isCollab);
+                };
+            }
 
             subContainer.appendChild(subItem);
         });
@@ -1399,7 +1471,11 @@ function createTaskItemElement(task, isCollab) {
     } else {
         // No subtasks: clicking the text container also toggles completion
         textContainer.onclick = () => {
-            toggleMainTask(task.id, isCollab);
+            if (isReadOnly) {
+                showNotification("🔒 Tu turno ya concluyó. No es posible modificar tareas tras checar salida.", 3500);
+            } else {
+                toggleMainTask(task.id, isCollab);
+            }
         };
     }
 
@@ -1409,6 +1485,11 @@ function createTaskItemElement(task, isCollab) {
 function toggleMainTask(taskId, isCollab) {
     const taskObj = dailyTasks.find(d => d.id === taskId);
     if (!taskObj) return;
+
+    if (isEmployeeShiftCompletedForTask(taskObj)) {
+        showNotification("🔒 Tu turno ya concluyó. No es posible modificar tareas tras checar salida.", 3500);
+        return;
+    }
 
     const newCompletedState = !taskObj.completed;
     
@@ -1453,6 +1534,11 @@ function toggleMainTask(taskId, isCollab) {
 function toggleSubtask(taskId, subIdx, isChecked, isCollab) {
     const taskObj = dailyTasks.find(d => d.id === taskId);
     if (!taskObj) return;
+
+    if (isEmployeeShiftCompletedForTask(taskObj)) {
+        showNotification("🔒 Tu turno ya concluyó. No es posible modificar tareas tras checar salida.", 3500);
+        return;
+    }
 
     const matches = (taskObj.role_name === 'Colaborativa' || isCollab)
         ? dailyTasks.filter(d => d.date === taskObj.date && d.task_name === taskObj.task_name && d.role_name === 'Colaborativa')
