@@ -95,12 +95,14 @@ const MONTHS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "
 
 // --- Default Base Data (Fallback) ---
 const DEFAULT_EMPLOYEES = [
-    { id: 1, name: "Juan Pérez", pin: "1111", is_admin: false },
-    { id: 2, name: "María Gómez", pin: "2222", is_admin: false },
-    { id: 3, name: "Pedro Alva", pin: "3333", is_admin: false },
-    { id: 4, name: "Ana Ruiz", pin: "4444", is_admin: false },
-    { id: 5, name: "Luis Delgado", pin: "5555", is_admin: false },
-    { id: 99, name: "KRU (Gerencia Virtual)", nickname: "KRU", photo: "kru_avatar.jpg", pin: "231217", is_admin: true }
+    { id: 1, name: "Dayana", nickname: "Dayana", pin: "1111", is_admin: false },
+    { id: 2, name: "Ceci", nickname: "Cintia Cecilia", pin: "2222", is_admin: false },
+    { id: 3, name: "Alexa", nickname: "Alexiña Capuchina 💖", pin: "3333", is_admin: false },
+    { id: 4, name: "Daniela", nickname: "Daniela", pin: "4444", is_admin: false },
+    { id: 5, name: "Emanuel", nickname: "Emmanuel", pin: "5555", is_admin: false },
+    { id: 1782438056763, name: "Abril", nickname: "Abril", pin: "6666", is_admin: false },
+    { id: 1782438065989, name: "Evelyn", nickname: null, pin: "1984", is_admin: true },
+    { id: 99, name: "David", nickname: null, pin: "1983", is_admin: true }
 ];
 
 // Default tasks if CSV is empty
@@ -165,7 +167,12 @@ function loadLocalDatabase() {
     
     // Load Attendance
     try {
-        attendanceLogs = JSON.parse(localStorage.getItem('roods_attendance')) || [];
+        let loadedAtt = JSON.parse(localStorage.getItem('roods_attendance')) || [];
+        // Prune logs older than 14 days to prevent quota overflow and keep storage clean
+        const attCutoff = new Date();
+        attCutoff.setDate(attCutoff.getDate() - 14);
+        const attCutoffStr = formatDateString(attCutoff);
+        attendanceLogs = loadedAtt.filter(a => !a.date || a.date >= attCutoffStr);
     } catch (e) {
         console.error("Error loading attendance, resetting:", e);
         attendanceLogs = [];
@@ -199,7 +206,7 @@ function loadLocalDatabase() {
             taskTemplates = JSON.parse(savedTemplates);
         } else {
             parseTasksCsv(DEFAULT_TASKS_CSV);
-            localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
+            try { localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates)); } catch (e) {}
         }
     } catch (e) {
         console.error("Error loading task templates, resetting:", e);
@@ -208,12 +215,12 @@ function loadLocalDatabase() {
 }
 
 function saveLocalDatabase() {
-    localStorage.setItem('roods_employees', JSON.stringify(employees));
-    localStorage.setItem('roods_weekly_roles', JSON.stringify(weeklyRoles));
-    localStorage.setItem('roods_attendance', JSON.stringify(attendanceLogs));
-    localStorage.setItem('roods_swaps', JSON.stringify(swapRequests));
-    localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
-    localStorage.setItem('roods_daily_tasks', JSON.stringify(dailyTasks));
+    try { localStorage.setItem('roods_employees', JSON.stringify(employees)); } catch (e) { console.warn("Error saving employees:", e); }
+    try { localStorage.setItem('roods_weekly_roles', JSON.stringify(weeklyRoles)); } catch (e) { console.warn("Error saving weeklyRoles:", e); }
+    try { localStorage.setItem('roods_attendance', JSON.stringify(attendanceLogs)); } catch (e) { console.warn("Error saving attendanceLogs:", e); }
+    try { localStorage.setItem('roods_swaps', JSON.stringify(swapRequests)); } catch (e) { console.warn("Error saving swapRequests:", e); }
+    try { localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates)); } catch (e) { console.warn("Error saving taskTemplates:", e); }
+    try { localStorage.setItem('roods_daily_tasks', JSON.stringify(dailyTasks)); } catch (e) { console.warn("Error saving dailyTasks:", e); }
 }
 
 // --- Supabase Cloud Sync Syncing ---
@@ -248,8 +255,17 @@ async function syncFromCloud() {
             localStorage.setItem('roods_weekly_roles', JSON.stringify(weeklyRoles));
         }
 
-        // 3. Sync Attendance (Smart merge to prevent wiping fresh local logs)
-        const { data: dbAtt, error: errAtt } = await supabaseClient.from('roods_attendance').select('*');
+        // 3. Sync Attendance (Smart merge to prevent wiping fresh local logs & avoid PostgREST 1000-row cap)
+        const attCutoff = new Date();
+        attCutoff.setDate(attCutoff.getDate() - 14);
+        const attCutoffStr = formatDateString(attCutoff);
+
+        const { data: dbAtt, error: errAtt } = await supabaseClient
+            .from('roods_attendance')
+            .select('*')
+            .gte('date', attCutoffStr)
+            .order('id', { ascending: false });
+
         if (errAtt) throw errAtt;
         if (dbAtt) {
             const attMap = new Map();
@@ -258,13 +274,21 @@ async function syncFromCloud() {
             });
             const unpushed = [];
             attendanceLogs.forEach(a => {
-                if (a && a.id && !attMap.has(String(a.id))) {
-                    attMap.set(String(a.id), a);
-                    unpushed.push(a);
+                if (a && a.id) {
+                    if (!attMap.has(String(a.id))) {
+                        if (!a.date || a.date >= attCutoffStr) {
+                            attMap.set(String(a.id), a);
+                            unpushed.push(a);
+                        }
+                    }
                 }
             });
             attendanceLogs = Array.from(attMap.values());
-            localStorage.setItem('roods_attendance', JSON.stringify(attendanceLogs));
+            try {
+                localStorage.setItem('roods_attendance', JSON.stringify(attendanceLogs));
+            } catch (e) {
+                console.warn("Could not save attendanceLogs to localStorage (quota exceeded):", e);
+            }
             if (unpushed.length > 0) {
                 pushToCloudTable('roods_attendance', unpushed);
             }
@@ -284,7 +308,7 @@ async function syncFromCloud() {
         cutoff.setDate(cutoff.getDate() - 3);
         const cutoffStr = formatDateString(cutoff);
         
-        const { data: dbDaily, error: errDaily } = await supabaseClient.from('roods_daily_tasks').select('*').gte('date', cutoffStr);
+        const { data: dbDaily, error: errDaily } = await supabaseClient.from('roods_daily_tasks').select('*').gte('date', cutoffStr).order('id', { ascending: false });
         if (errDaily) throw errDaily;
         if (dbDaily) {
             const localMap = new Map();
@@ -370,9 +394,32 @@ async function syncFromCloud() {
         setSyncIndicator("Nube Sincronizada", "");
         console.log("Supabase sync successful!");
 
+        // Restore session if user was not logged in yet (e.g. fresh start / employee list just synced)
+        if (!currentUser) {
+            try {
+                const savedSession = localStorage.getItem('roods_active_session');
+                if (savedSession) {
+                    const parsed = JSON.parse(savedSession);
+                    const foundEmp = employees.find(e => Number(e.id) === Number(parsed.id) || (parsed.pin && String(e.pin) === String(parsed.pin)));
+                    if (foundEmp) {
+                        currentUser = foundEmp;
+                        if (currentUser.is_admin) {
+                            showSection('adminSection');
+                            initAdminView();
+                        } else {
+                            showSection('employeeSection');
+                            initEmployeeView();
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn("Could not restore session during cloud sync:", e);
+            }
+        }
+
         // Refresh UI with synced data
         if (currentUser) {
-            const freshUser = employees.find(e => e.id === currentUser.id);
+            const freshUser = employees.find(e => Number(e.id) === Number(currentUser.id));
             if (freshUser) currentUser = freshUser;
             
             if (currentUser.is_admin) {
@@ -678,11 +725,11 @@ function resolveTodaySchedules(empId, date) {
     // 1. Check if there is an approved swap for today where this employee covers
     const approvedSwapsCover = swapRequests.filter(s => 
         s.request_date === dateStr && 
-        s.to_employee_id === empId && 
+        Number(s.to_employee_id) === Number(empId) && 
         s.status === 'aprobado'
     );
     approvedSwapsCover.forEach(swap => {
-        const originalOwner = employees.find(e => e.id === swap.from_employee_id);
+        const originalOwner = employees.find(e => Number(e.id) === Number(swap.from_employee_id));
         const roleInfo = Object.values(ROODS_ROLES).find(r => r.name === swap.role_name) || {
             key: 'swap-' + swap.id,
             taskRoles: [swap.role_name],
@@ -702,7 +749,7 @@ function resolveTodaySchedules(empId, date) {
     // Get list of role names that the employee swapped out today
     const approvedSwapsRequester = swapRequests.filter(s => 
         s.request_date === dateStr && 
-        s.from_employee_id === empId && 
+        Number(s.from_employee_id) === Number(empId) && 
         s.status === 'aprobado'
     );
     const swappedRoleNames = approvedSwapsRequester.map(s => s.role_name);
@@ -714,7 +761,7 @@ function resolveTodaySchedules(empId, date) {
 
     if (weekSchedule) {
         for (const [roleKey, assignedEmpId] of Object.entries(weekSchedule)) {
-            if (assignedEmpId === empId) {
+            if (Number(assignedEmpId) === Number(empId)) {
                 const roleInfo = ROODS_ROLES[roleKey];
                 if (roleInfo) {
                     // Check if this weekly role assignment was swapped out
@@ -2557,7 +2604,7 @@ function setAttendanceToday() {
     }
 }
 
-function renderAdminAttendance() {
+async function renderAdminAttendance() {
     const tbody = document.getElementById('attendanceTableBody');
     if (!tbody) return;
     tbody.innerHTML = "";
@@ -2573,6 +2620,59 @@ function renderAdminAttendance() {
         dateInput.value = formatDateString(new Date());
     }
     const selectedDateStr = dateInput ? dateInput.value : formatDateString(new Date());
+
+    // On-demand fetch from Supabase if date or week is not in local memory
+    if (supabaseClient) {
+        if (filterType === 'DAY' && selectedDateStr) {
+            const hasDateLocally = attendanceLogs.some(l => l.date === selectedDateStr);
+            if (!hasDateLocally) {
+                try {
+                    const { data: remoteAtt, error: rErr } = await supabaseClient
+                        .from('roods_attendance')
+                        .select('*')
+                        .eq('date', selectedDateStr)
+                        .order('id', { ascending: false });
+                    if (!rErr && remoteAtt && remoteAtt.length > 0) {
+                        remoteAtt.forEach(r => {
+                            if (!attendanceLogs.some(l => String(l.id) === String(r.id))) {
+                                attendanceLogs.push(r);
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.warn("Error fetching remote attendance for date:", e);
+                }
+            }
+        } else if (filterType === 'WEEK' && selectedDateStr) {
+            const targetDate = new Date(selectedDateStr + "T00:00:00");
+            const weekStart = getStartOfWeekWednesday(targetDate);
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 5);
+            const startStr = formatDateString(weekStart);
+            const endStr = formatDateString(weekEnd);
+            
+            const hasWeekLocally = attendanceLogs.some(l => l.date >= startStr && l.date <= endStr);
+            if (!hasWeekLocally) {
+                try {
+                    const { data: remoteAtt, error: rErr } = await supabaseClient
+                        .from('roods_attendance')
+                        .select('*')
+                        .gte('date', startStr)
+                        .lte('date', endStr)
+                        .order('id', { ascending: false });
+                    if (!rErr && remoteAtt && remoteAtt.length > 0) {
+                        remoteAtt.forEach(r => {
+                            if (!attendanceLogs.some(l => String(l.id) === String(r.id))) {
+                                attendanceLogs.push(r);
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.warn("Error fetching remote weekly attendance:", e);
+                }
+            }
+        }
+    }
 
     // Sort logs chronologically, newest first
     const sorted = [...attendanceLogs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -3884,7 +3984,7 @@ function initApp() {
         const savedSession = localStorage.getItem('roods_active_session');
         if (savedSession) {
             const parsed = JSON.parse(savedSession);
-            const foundEmp = employees.find(e => e.id === parsed.id || (parsed.pin && e.pin === parsed.pin));
+            const foundEmp = employees.find(e => Number(e.id) === Number(parsed.id) || (parsed.pin && String(e.pin) === String(parsed.pin)));
             if (foundEmp) {
                 currentUser = foundEmp;
                 if (currentUser.is_admin) {
