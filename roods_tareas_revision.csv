@@ -1,0 +1,71 @@
+﻿Orden,Rol,Turno,Tarea,Subtareas,Imprescindible,Dias
+1,CajiBari,Ambos,Ritual de Apertura,Prender máquinas y luces;Hervir agua para tapioca;Revisar llenado de garrafón;Revisar pila en tablet y celular,No,Todos
+2,CajiBari,Ambos,Contar fondo de caja inicial (apertura),Contar fondo en caja;Anotar en reporte;Abrir poster,Si,Todos
+3,CajiBari,Ambos,Limpieza inicial,"Barra bebidas frías;Barra cafetera;Barrer area interior;Trapear área interior y salón, Asear baño clientes;Papel y servitoallas baño",No,Todos
+4,CajiBari,Ambos,Mise En Place Caja,Tickets;Revisar Cambio;Asistir a banco en caso de ser necesario (2:30 pm),No,Todos
+5,CajiBari,Ambos,Mise En Place Barra,Polvos;Leche;Jarabe;Extraer café (completar),No,Todos
+6,CajiBari,Ambos,Mise En Place Vitrina,Acomodar y rellenar productos,No,Todos
+7,CajiBari,Ambos,Mensaje a Cumpleañeros,,Si,Todos
+8,CajiBari,Ambos,Corte de caja (fin de turno),"Contar efectivo;Anotar en reporte;Efectivo en sobre;Voucher y Roodsipesos en Sobre; Meter sobre a caja negra;Dejar 2,000 cambio;Cerrar Poster",Si,Todos
+9,CajiBari,Ambos,Limpieza Profunda cafetera,Utiliar Filtro ciego y Rinza,No,Miércoles
+10,CajiBari,Ambos,Mise En Place Gabinete 1,Limpiar y órdenar gabinete,No,Miércoles
+11,CajiBari,Ambos,Mise En Place Gabinete 2,2 paquetes balas;2 Cajas tickets; 2 tickets comanda;Tangas y similares;Velitas cumpleaños; Limpiar y ordenar caja; Limpiar y ordenar gabinete,No,Miércoles
+12,CajiBari,Ambos,Ritual de Cierre,Tirar Basura;Poner bolsas de basura,No,Todos
+13,CajiBari,Ambos,Checar salida,Revisar mi avance personal;Revisar tareas de turno;reportar tareas no cumplidas;,Si,Todos
+14,CajiBari,Matutino,Limpieza Vitrina Pecera por Dentro,,No,Miercoles
+1,CociBari,Ambos,Ritual de Apertura,Descongelar donas; Llenar Olla con agua para elotes;Colocar bolsas de basura,No,Todos
+2,CociBari,Ambos,Limpieza inicial,Barrer terraza y salón;Trapear terraza;Acomodar y preparar mesas;Limpieza de barras Cocina; limpieza de carro de elote;,No,Todos
+3,CociBari,Ambos,Listado de Compras del día,Zanahoria;Calabaza;Col;Fresa;Platano;Limones;Habanero;Jalapeño,No,Todos
+4,CociBari,Ambos,Decorar Donas,Planear;Decorar;Limpiar,No,Todos
+5,CociBari,Ambos,Cocer Elote,Hervir agua;Poner elote; limpiar elote; sazonar elote; sacar un bote de elote y guardar,No,Todos
+6,CociBari,Ambos,Check List Cocina,Aderezos y botes suficientes;Papas suficientes;Preparado para Waffle;Salsas chilaquiles;Verdura suficiente;Pan y huevo,No,Todos
+7,CociBari,Ambos,Preparar freidora,,No,Miércoles
+8,CociBari,Ambos,Mise En Place Buldack,Relleno semanal Buldack,No,Miércoles
+9,CociBari,Ambos,Ritual de cierre,Lavar trapos;Lavar Trapiador,No,Todos
+10,CociBari,Ambos,Checar salida,Revisar mi avance personal;Revisar tareas de turno;reportar tareas no cumplidas;,Si,Todos
+1,Coci,Ambos,Mise En Place Aderezos y +,Chipotle;Habanero;Jalapeño;Crema;Mayonesa;Queso Amarillo;Rellenar Tonkotzu,No,Todos
+2,Coci,Ambos,Mise En Place Papas,Rellenar Incertos;Rellenar Pre-bodega; Moler si es necesario;Rellenar tostitos,No,Todos
+3,Coci,Ambos,Mise En Place Waffle,Harina para Waffles;Helado en congelador;Toppings en toopers;Lechera y cajeta en botes;Nutella;Mantequilla;Fresa;Plátano,No,Todos
+4,Coci,Ambos,Mise En Place Desechables,Mediano;Jumbo;Caja china;Contenedor Waffle;Tenedores;Cucharas;Palillos chinos;Cucharita Coreana;Caja Tostielote;Servilletas;Bolsas;Film;Vasitos salsa;Papel tortilla cortado;Bolsa papel sandwich;Bolsas plástio chips,No,Todos
+5,Coci,Ambos,Mise En Place Generales,Polvo condimento;Salsa Macha;relleno botecitos salsa macha;Queso Blanco;Limones;Tajin en bote;Ramen en toppers,No,Todos
+6,Coci,Ambos,Mise En Place Fritos,Dumplings;Rollitos;Minitaquitos;Vaistos Soya;Vasitos Soya Picante;Salsa Rollitos;Salsa Rollitos Picante;Aceite en bote;Aceite a nivel en freidora,No,Todos
+7,Coci,Ambos,Mise En Place Sandwich,Pan;Aderezo preparado;Zanahoria rallada;Col.Rayada;Rellenar Huevos;Papas,No,Todos
+8,Coci,Ambos,Mise En Place Chilaquiles,Salsa Roja;Salsa Verde;Totopos,No,Todos
+9,Coci,Ambos,Mise En Place Ramen,Rellenar Tonkotzu;Naruto,No,Todos
+10,Coci,Ambos,Checar salida,Revisar mi avance personal;Reportar tareas no cumplidas;,Si,Todos
+11,Coci,Vespertino,Limpiar el microondas,,Si,Hoy viernes
+12,Coci,Ambos,Cocinar Salsa Macha si es necesario,,No,Miércoles
+13,Coci,Vespertino,Rellenar donas en congelador pequeño blanco,,No,Todos
+1,Cajero,Ambos,Ritual de Apertura,"Contar fondo en caja; Anotar en reporte; Abrir Poster; Revisar tapioca, Cocer tapioca; Revisar contenedor de tapioca explosiva; Lavar y cambiar contenedor de tapioca si es necesario",No,Todos
+2,Cajero,Ambos,Limpieza inicial cajero,Barrer y trapear área interna;Limpieza de Barra Café;Rellenado y acomodo de vitrinas,No,Todos
+3,Cajero,Ambos,Ritual de Cierre,Lavar trapos;Lavar trapeador,No,Todos
+4,Cajero,Ambos,Corte de caja,"Contar efectivo;Anotar en reporte;Efectivo en sobre;Voucher y Roodsipesos en Sobre; Meter sobre a caja negra;Dejar 2,000 cambio;Cerrar Poster",Si,Todos
+5,Cajero,Ambos,Chel List cierre sucursal,Apagar interruptor música;Apagar luces generales y TV en Oficina; Supervisar apagado de maquinas; Supervisar cierre de gas; Supervisar Cierre de puerta,Si,Todos
+6,Cajero,Ambos,Checar salida,Revisar mi avance personal;Revisar tareas de turno;reportar tareas no cumplidas;,Si,Todos
+7,Cajero,Vespertino,Sacar cajas de cartón (en equipo),,Si,Todos
+1,Barista,Ambos,Ritual de apertura y limpieza inicial,Hervir agua; Cocer tapioca; Revisión de Insumos; Relleno de botes; Revisión y relleno de garrafón,Si,Todos
+2,Barista,Ambos,limpieza inicial barista,Barrer y trapear salón; Asear baño clientes; Limpiar mesas; Limpiar selladora de vasos; Lavar licuadoras con jabón,No,Todos
+3,Barista,Ambos,Ritual de Cierre,Limpiar rejilla cafetera; Limpieza sencilla cafetera con esponja amarilla; Tirar borra de café; Sacar basura de barra; Sacar basura de elote; Sacar basura de salón; Sacar basura de baños; Colocar bolsas en botes,No,Todos
+4,Barista,Ambos,Chel List cierre sucursal,Apagar Cafetera;Desconectar selladora de vasos;Apagar licuadora 1 y 2,Si,Todos
+5,Barista,Ambos,Check List Cierre sucursal miércoles,Desconectar Maquina de Hielos;Desconectar purificadora;Desconectar lámpara de purificadora,Si,Miércoles
+6,Barista,Ambos,Checar salida,Revisar mi avance personal;Revisar tareas de turno;reportar tareas no cumplidas;,Si,Todos
+1,Cocina,Ambos,Ritual de Apertura,Revisar insumos suficientes para el turno en general,No,Todos
+2,Cocina,Ambos,Limpieza inicial cocina,limpieza de area cocina; limpieza de carrito elote;,Si,Todos
+3,Cocina,Ambos,Limpieza de freidora,Evaluar necesidad de lavado;Sacar aceite para que Marthita lo lave,Si,Lunes
+4,Cocina,Ambos,Ritual de Cierre,"Lavado de trastes;secado de trastes;Trastes guardados;Lavado de olla elotes, Papitas cerradas",No,Todos
+5,Cocina,Ambos,Chel List cierre sucursal,Cerrar Válvula de Gas;Parrillas apagadas;Parrillas libres;Freidora desconectada;Waffles apagado;Grill apagado,Si,Todos
+6,Cocina,Ambos,Checar salida,Revisar mi avance personal;Revisar tareas de turno;reportar tareas no cumplidas;,Si,Todos
+7,Cocina,Vespertino,2da preparación de donas en caso de ser necesario,,No,Todos
+1,Apoyo General,Ambos,Checar salida,Revisar mi avance;reportar tareas no cumplidas,Si,Sábado;Domingo
+2,Apoyo General,Ambos,Apoyar Tareas en barra,Mantener mesas del salón limpias; Dar rondas al salón; Apoyar tareas en barra; Apoyar tareas en cocina; Apoyar tareas en caja,No,Todos
+3,Apoyo General,Ambos,Limpiar salón previo al cierre,Previo al cierre barrer y trapear salón,No,Todos
+1,Aux. Administrativo,Ambos,Hacer inventario,,No,Lunes
+2,Aux. Administrativo,Ambos,Elaborar órdenes de compra,,No,Lunes
+3,Aux. Administrativo,Ambos,Junta con gerencia,,No,Lunes
+4,Aux. Administrativo,Ambos,Tareas diarias,Contabilizar Mermas; Registrar Gastos; Supervisar caja chica; Contacto con proveedores;Seiguimiento a compras;Supervisar recepciòn de productos;Supervisión de ventas,No,Todos
+5,Aux. Administrativo,Ambos,Mantenimiento y Acomodo de Bodega,Anaqueles;Congelador,No,Todos
+6,Aux. Administrativo,Ambos,Checar salida,Revisar mi avance personal;Revisar tareas de turno;reportar tareas no cumplidas;,Si,Todos
+7,Aux. Administrativo,Vespertino,hoja de registro compras locales,Imprimir; Asegurar que quede hoy repuesto el dinero en caja de madera,Si,Lunes
+1,Colaborativa,Vespertino,Sacar cajas a la basura,,No,Todos
+1,Apoyo MKT,Ambos,Revisar Cronograma de MKT,Crear publicación del día; Actualizar actividades; Marcar publicaciones enviadas,No,Todos
+2,Apoyo MKT,Ambos,"Al concluir cronograma, reunión con David y Evelyn",,Si,Todos

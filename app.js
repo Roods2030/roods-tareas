@@ -387,7 +387,10 @@ async function syncFromCloud() {
         if (errTemplates) throw errTemplates;
 
         if (dbTemplates) {
-            taskTemplates = dbTemplates;
+            taskTemplates = dbTemplates.map((t, idx) => ({
+                ...t,
+                Orden: t.Orden !== undefined ? t.Orden : (idx + 1)
+            }));
             localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
         }
 
@@ -1145,7 +1148,7 @@ function generateDailyTasks(dateStr, schedule) {
 
     const sanitize = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
 
-    matchingTemplates.forEach(t => {
+    matchingTemplates.forEach((t, tIdx) => {
         const targetRole = (t.Rol === 'Colaborativa') ? 'Colaborativa' : schedule.roleName;
         const taskKey = t.Tarea + '|' + targetRole;
         const deterministicId = `task_${dateStr}_${sanitize(targetRole)}_${sanitize(t.Tarea)}`;
@@ -1175,7 +1178,8 @@ function generateDailyTasks(dateStr, schedule) {
                 Subtareas: t.Subtareas || "",
                 subtasks_state: subtasksState,
                 is_urgent: false,
-                urgent_acknowledged: false
+                urgent_acknowledged: false,
+                orden: t.Orden !== undefined ? t.Orden : (tIdx + 1)
             };
             dailyTasks.push(instance);
             newInstances.push(instance);
@@ -1275,15 +1279,26 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
     const collabTasksRaw = todayTasks.filter(t => t.role_name === 'Colaborativa');
     const collabTasks = deduplicateTaskInstances(collabTasksRaw);
 
-    // Sort function based on original template order
-    const templateOrderSort = (a, b) => {
-        const idxA = taskTemplates.findIndex(tmpl => tmpl['Tarea'] === a.task_name && tmpl['Rol'] === a.role_name);
-        const idxB = taskTemplates.findIndex(tmpl => tmpl['Tarea'] === b.task_name && tmpl['Rol'] === b.role_name);
-        return (idxA !== -1 ? idxA : 999999) - (idxB !== -1 ? idxB : 999999);
+    // Sort function based on original template order / explicit Orden
+    const getTaskOrder = (task) => {
+        if (task.orden !== undefined && task.orden !== null && !isNaN(task.orden)) {
+            return Number(task.orden);
+        }
+        const idx = taskTemplates.findIndex(tmpl => {
+            if (tmpl['Tarea'] !== task.task_name) return false;
+            if (tmpl['Rol'] === task.role_name) return true;
+            if (tmpl['Rol'] === 'Colaborativa' && task.role_name === 'Colaborativa') return true;
+            if (typeof isRoleMatch === 'function' && isRoleMatch(tmpl['Rol'], [task.role_name])) return true;
+            return false;
+        });
+        if (idx !== -1) {
+            return (taskTemplates[idx].Orden !== undefined && taskTemplates[idx].Orden !== null) ? Number(taskTemplates[idx].Orden) : (idx + 1);
+        }
+        return 999999;
     };
 
-    myTasks.sort(templateOrderSort);
-    collabTasks.sort(templateOrderSort);
+    myTasks.sort((a, b) => getTaskOrder(a) - getTaskOrder(b));
+    collabTasks.sort((a, b) => getTaskOrder(a) - getTaskOrder(b));
 
     // Render My Tasks
     if (myTasks.length === 0) {
@@ -2871,18 +2886,20 @@ function renderAdminCsvView() {
     }
 
     if (filteredTemplates.length === 0) {
-        preview.innerHTML = `<tr><td colspan="7" class="text-center text-light" style="padding: 20px;">No hay tareas cargadas o que coincidan con el filtro.</td></tr>`;
+        preview.innerHTML = `<tr><td colspan="8" class="text-center text-light" style="padding: 20px;">No hay tareas cargadas o que coincidan con el filtro.</td></tr>`;
         return;
     }
 
-    filteredTemplates.forEach(t => {
+    filteredTemplates.forEach((t, idx) => {
         const tr = document.createElement('tr');
         const impVal = t.Imprescindible || "No";
         const turnoVal = t.Turno || "Ambos";
         const subsList = t.Subtareas ? t.Subtareas.split(';').map(s => s.trim()).filter(s => s) : [];
         const subsText = subsList.length > 0 ? `${subsList.length} subtarea(s)` : "Ninguna";
+        const orderNum = (t.Orden !== undefined && t.Orden !== null) ? t.Orden : (idx + 1);
         
         tr.innerHTML = `
+            <td style="font-weight:700; color:var(--text-secondary); text-align:center;">${orderNum}</td>
             <td class="bold-label">${t.Tarea}</td>
             <td><span class="badge" style="background-color: #673ab7; font-weight:700; margin:0;">${t.Rol}</span></td>
             <td><span class="badge" style="background-color: #009688; font-weight:700; margin:0;">${turnoVal}</span></td>
@@ -3127,19 +3144,21 @@ async function submitTaskTemplateForm(event) {
 }
 
 function downloadTemplateCsv() {
-    let csvContent = "Tarea,Rol,Turno,Dias,Imprescindible,Subtareas\n";
+    let csvContent = "\uFEFFOrden,Rol,Turno,Tarea,Subtareas,Imprescindible,Dias\n";
     
     if (taskTemplates.length > 0) {
-        taskTemplates.forEach(t => {
-            const escapedTask = t.Tarea.replace(/"/g, '""');
+        taskTemplates.forEach((t, idx) => {
+            const orderVal = (t.Orden !== undefined && t.Orden !== null) ? t.Orden : (idx + 1);
+            const escapedTask = (t.Tarea || "").replace(/"/g, '""');
+            const rolVal = (t.Rol || "").replace(/"/g, '""');
             const turnoVal = t.Turno || "Ambos";
             const impVal = t.Imprescindible || "No";
-            const subsVal = t.Subtareas || "";
-            const escapedSubs = subsVal.replace(/"/g, '""');
-            csvContent += `"${escapedTask}",${t.Rol},${turnoVal},${t.Dias},${impVal},"${escapedSubs}"\n`;
+            const subsVal = (t.Subtareas || "").replace(/"/g, '""');
+            const diasVal = (t.Dias || "Todos").replace(/"/g, '""');
+            csvContent += `${orderVal},"${rolVal}",${turnoVal},"${escapedTask}","${subsVal}",${impVal},"${diasVal}"\n`;
         });
     } else {
-        csvContent += DEFAULT_TASKS_CSV.replace("Tarea,Rol,Turno,Dias,Imprescindible,Subtareas\n", "");
+        csvContent += "1,CajiBari,Matutino,\"Ritual de Apertura\",\"Prender máquinas;Revisar tablet\",No,Todos\n";
     }
 
     try {
@@ -3158,7 +3177,7 @@ function downloadTemplateCsv() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "roods_tareas_plantilla.csv");
+    link.setAttribute("download", "roods_tareas_revision.csv");
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -3177,14 +3196,14 @@ function importCsv(event) {
         if (success) {
             saveLocalDatabase();
             if (supabaseClient) {
-                // Clear templates in cloud first and insert new
+                // Clear templates in cloud first and insert new in ordered sequence
                 supabaseClient.from('roods_task_templates').delete().neq('id', 0).then(() => {
                     const dbInsertData = taskTemplates.map(t => {
                         return {
                             "Tarea": t.Tarea,
                             "Rol": t.Rol,
                             "Turno": t.Turno || "Ambos",
-                            "Dias": t.Dias,
+                            "Dias": t.Dias || "Todos",
                             "Imprescindible": t.Imprescindible || "No",
                             "Subtareas": t.Subtareas || ""
                         };
@@ -3193,9 +3212,12 @@ function importCsv(event) {
                         if (error) {
                             console.error("Error inserting CSV templates:", error);
                         } else {
-                            supabaseClient.from('roods_task_templates').select('*').then(({ data: freshData }) => {
+                            supabaseClient.from('roods_task_templates').select('*').order('id', { ascending: true }).then(({ data: freshData }) => {
                                 if (freshData) {
-                                    taskTemplates = freshData;
+                                    taskTemplates = freshData.map((t, idx) => ({
+                                        ...t,
+                                        Orden: idx + 1
+                                    }));
                                     localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
                                     renderAdminCsvView();
                                 }
@@ -3207,7 +3229,7 @@ function importCsv(event) {
             renderAdminCsvView();
             showNotification("📤 Archivo CSV importado con éxito.");
         } else {
-            alert("Error al procesar el archivo CSV. Asegúrate de tener los encabezados correctos: Tarea, Rol, Turno, Dias");
+            alert("Error al procesar el archivo CSV. Asegúrate de incluir los encabezados mínimos: Tarea, Rol (opcionales: Orden, Turno, Dias, Imprescindible, Subtareas).");
         }
     };
     reader.readAsText(file);
@@ -3246,18 +3268,23 @@ async function clearAllTaskTemplates() {
 
 function parseTasksCsv(csvText) {
     try {
-        const lines = csvText.split(/\r?\n/).filter(l => l.trim() !== "");
+        let cleanText = csvText;
+        if (cleanText.charCodeAt(0) === 0xFEFF) {
+            cleanText = cleanText.slice(1);
+        }
+        const lines = cleanText.split(/\r?\n/).filter(l => l.trim() !== "");
         if (lines.length < 2) return false;
 
-        const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+        const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/["']/g, ''));
         const taskIdx = headers.indexOf("tarea");
         const roleIdx = headers.indexOf("rol");
         const turnoIdx = headers.indexOf("turno");
         const daysIdx = headers.indexOf("dias");
         const impIdx = headers.indexOf("imprescindible");
         const subsIdx = headers.indexOf("subtareas");
+        const ordenIdx = headers.findIndex(h => h === "orden" || h === "no" || h === "#");
 
-        if (taskIdx === -1 || roleIdx === -1 || daysIdx === -1) {
+        if (taskIdx === -1 || roleIdx === -1) {
             return false;
         }
 
@@ -3269,13 +3296,21 @@ function parseTasksCsv(csvText) {
             
             if (parts.length > 0 && parts[taskIdx]) {
                 const turnoVal = (turnoIdx !== -1 && parts[turnoIdx]) ? parts[turnoIdx].trim() : "Ambos";
+                const daysVal = (daysIdx !== -1 && parts[daysIdx]) ? parts[daysIdx].trim() : "Todos";
                 const impVal = (impIdx !== -1 && parts[impIdx]) ? parts[impIdx].trim() : "No";
                 const subsVal = (subsIdx !== -1 && parts[subsIdx]) ? parts[subsIdx].trim() : "";
+                
+                let ordenVal = i;
+                if (ordenIdx !== -1 && parts[ordenIdx] && !isNaN(parts[ordenIdx].trim())) {
+                    ordenVal = parseInt(parts[ordenIdx].trim(), 10);
+                }
+
                 templates.push({
+                    Orden: ordenVal,
                     Tarea: parts[taskIdx].trim(),
                     Rol: parts[roleIdx].trim(),
                     Turno: turnoVal || "Ambos",
-                    Dias: parts[daysIdx].trim(),
+                    Dias: daysVal || "Todos",
                     Imprescindible: impVal,
                     Subtareas: subsVal
                 });
@@ -3283,6 +3318,7 @@ function parseTasksCsv(csvText) {
         }
 
         if (templates.length > 0) {
+            templates.sort((a, b) => (a.Orden || 999999) - (b.Orden || 999999));
             taskTemplates = templates;
             return true;
         }
