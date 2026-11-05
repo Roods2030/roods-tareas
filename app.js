@@ -392,6 +392,9 @@ async function syncFromCloud() {
                 Orden: t.Orden !== undefined ? t.Orden : (idx + 1)
             }));
             localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
+            if (typeof refreshTodayDailyTasksFromTemplates === 'function') {
+                refreshTodayDailyTasksFromTemplates();
+            }
         }
 
         setSyncIndicator("Nube Sincronizada", "");
@@ -1183,6 +1186,42 @@ function generateDailyTasks(dateStr, schedule) {
             };
             dailyTasks.push(instance);
             newInstances.push(instance);
+        } else {
+            // Reconcile and update existing uncompleted task if template changed
+            const existingTask = dailyTasks.find(d => d.date === dateStr && (d.id === deterministicId || (d.task_name === t.Tarea && d.role_name === targetRole)));
+            if (existingTask && !existingTask.completed) {
+                let taskChanged = false;
+                const newSubs = t.Subtareas || "";
+                if (existingTask.Subtareas !== newSubs) {
+                    existingTask.Subtareas = newSubs;
+                    const oldState = existingTask.subtasks_state || [];
+                    const completedMap = new Map();
+                    oldState.forEach(st => completedMap.set(st.name, Boolean(st.completed)));
+                    const subNames = newSubs.split(';').map(s => s.trim()).filter(s => s);
+                    existingTask.subtasks_state = subNames.map(name => ({
+                        name: name,
+                        completed: completedMap.get(name) || false
+                    }));
+                    taskChanged = true;
+                }
+                const newImp = t.Imprescindible || "No";
+                if (existingTask.Imprescindible !== newImp) {
+                    existingTask.Imprescindible = newImp;
+                    taskChanged = true;
+                }
+                const newShift = t.Turno || "Ambos";
+                if (existingTask.shift !== newShift) {
+                    existingTask.shift = newShift;
+                    taskChanged = true;
+                }
+                if (t.Orden !== undefined && existingTask.orden !== t.Orden) {
+                    existingTask.orden = t.Orden;
+                    taskChanged = true;
+                }
+                if (taskChanged) {
+                    newInstances.push(existingTask);
+                }
+            }
         }
     });
 
@@ -3185,6 +3224,42 @@ function downloadTemplateCsv() {
     URL.revokeObjectURL(url);
 }
 
+function refreshTodayDailyTasksFromTemplates() {
+    const today = new Date();
+    const todayStr = formatDateString(today);
+    
+    // Prune uncompleted template tasks whose template no longer exists
+    const validTaskNames = new Set(taskTemplates.map(t => t.Tarea));
+    const toDeleteIds = [];
+    
+    dailyTasks = dailyTasks.filter(d => {
+        if (d.date === todayStr && !d.completed && !d.is_manual && String(d.id).startsWith('task_')) {
+            if (!validTaskNames.has(d.task_name)) {
+                toDeleteIds.push(d.id);
+                return false;
+            }
+        }
+        return true;
+    });
+
+    if (toDeleteIds.length > 0 && supabaseClient) {
+        toDeleteIds.forEach(id => {
+            supabaseClient.from('roods_daily_tasks').delete().eq('id', id).then();
+        });
+    }
+
+    // Generate or update tasks for all scheduled employees today
+    employees.forEach(emp => {
+        if (emp.is_admin) return;
+        const empSchedules = resolveTodaySchedules(emp.id, today);
+        empSchedules.forEach(sched => {
+            generateDailyTasks(todayStr, sched);
+        });
+    });
+
+    saveLocalDatabase();
+}
+
 function importCsv(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -3219,12 +3294,15 @@ function importCsv(event) {
                                         Orden: idx + 1
                                     }));
                                     localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
+                                    refreshTodayDailyTasksFromTemplates();
                                     renderAdminCsvView();
                                 }
                             });
                         }
                     });
                 });
+            } else {
+                refreshTodayDailyTasksFromTemplates();
             }
             renderAdminCsvView();
             showNotification("📤 Archivo CSV importado con éxito.");
