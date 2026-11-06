@@ -579,10 +579,10 @@ async function syncFromCloud() {
                 sysConfigs.forEach(cfg => {
                     try {
                         const parsed = JSON.parse(cfg.message);
-                        if (parsed.type === 'ROLE_MISSIONS' && parsed.data) {
+                        if ((parsed.type === 'ROLE_MISSIONS' || parsed.type === 'ROLE_MISSIONS_CONFIG') && parsed.data) {
                             roleMissions = { ...DEFAULT_ROLE_MISSIONS, ...parsed.data };
                             localStorage.setItem('roods_role_missions', JSON.stringify(roleMissions));
-                        } else if (parsed.type === 'APP_BANNERS' && parsed.data) {
+                        } else if ((parsed.type === 'APP_BANNERS' || parsed.type === 'APP_BANNERS_CONFIG') && parsed.data) {
                             appBanners = { ...DEFAULT_BANNERS, ...parsed.data };
                             localStorage.setItem('roods_app_banners', JSON.stringify(appBanners));
                         }
@@ -1955,6 +1955,33 @@ async function pollEmployeeMessages() {
             console.error("Error polling private messages", e);
         }
     }
+
+    // 3. Sync System Configurations (Role Missions & System Banners) in real time
+    if (supabaseClient) {
+        try {
+            const { data: sysConfigs } = await supabaseClient
+                .from('roods_announcements')
+                .select('*')
+                .eq('created_by_name', 'SYSTEM_CONFIG')
+                .order('id', { ascending: false })
+                .limit(5);
+
+            if (sysConfigs && sysConfigs.length > 0) {
+                sysConfigs.forEach(cfg => {
+                    try {
+                        const parsed = JSON.parse(cfg.message);
+                        if ((parsed.type === 'ROLE_MISSIONS' || parsed.type === 'ROLE_MISSIONS_CONFIG') && parsed.data) {
+                            roleMissions = { ...DEFAULT_ROLE_MISSIONS, ...parsed.data };
+                            localStorage.setItem('roods_role_missions', JSON.stringify(roleMissions));
+                        } else if ((parsed.type === 'APP_BANNERS' || parsed.type === 'APP_BANNERS_CONFIG') && parsed.data) {
+                            appBanners = { ...DEFAULT_BANNERS, ...parsed.data };
+                            localStorage.setItem('roods_app_banners', JSON.stringify(appBanners));
+                        }
+                    } catch(e) {}
+                });
+            }
+        } catch (e) {}
+    }
 }
 
 function handleEmpPhotoSelected(event) {
@@ -2000,8 +2027,9 @@ async function sendEmployeeMessageToKru(event) {
     const newMsg = {
         id: Date.now(),
         sender_name: senderLabel,
+        sender_employee_id: Number(currentUser.id),
         recipient_id: Number(adminEmp.id),
-        message: text,
+        message: text || (tempEmpPhotoBase64 ? '📷 [Foto adjunta]' : ''),
         photo_url: tempEmpPhotoBase64 || null,
         read: false,
         created_at: nowIso
@@ -2024,7 +2052,7 @@ async function sendEmployeeMessageToKru(event) {
             const dbPayload = {
                 sender_name: senderLabel,
                 recipient_id: Number(adminEmp.id),
-                message: text,
+                message: newMsg.message,
                 photo_url: newMsg.photo_url,
                 read: false
             };
@@ -2133,20 +2161,42 @@ function acknowledgeGlobalAnnounce() {
 }
 
 // --- Gran Misión Modal Logic ---
-function openGranMisionModal() {
+function openGranMisionModal(forcedRoleKey) {
     if (!currentUser) return;
     const modal = document.getElementById('granMisionModal');
     if (!modal) return;
 
+    // Refresh roleMissions from localStorage to ensure freshest data on device
+    try {
+        const saved = localStorage.getItem('roods_role_missions');
+        if (saved) roleMissions = { ...DEFAULT_ROLE_MISSIONS, ...JSON.parse(saved) };
+    } catch(e) {}
+
     const today = new Date();
     const schedules = resolveTodaySchedules(currentUser.id, today);
-    let activeRoleKey = 'matutinoCajeroBarista';
+    let activeRoleKey = forcedRoleKey || null;
     let roleDisplayName = 'Colaborador';
 
-    if (schedules.length > 0) {
-        activeRoleKey = schedules[0].roleKey;
-        roleDisplayName = schedules[0].roleName || (ROODS_ROLES[activeRoleKey] ? ROODS_ROLES[activeRoleKey].name : 'Tu Rol');
+    if (!activeRoleKey) {
+        // Prioritize currently checked-in role
+        const userTodayLogs = attendanceLogs.filter(l => 
+            Number(l.employee_id) === Number(currentUser.id) && 
+            l.date === formatDateString(today)
+        );
+        for (const sched of schedules) {
+            const { isCurrentlyCheckedIn } = findRoleAttendance(userTodayLogs, sched, schedules.length);
+            if (isCurrentlyCheckedIn) {
+                activeRoleKey = sched.roleKey;
+                roleDisplayName = sched.roleName || (ROODS_ROLES[activeRoleKey] ? ROODS_ROLES[activeRoleKey].name : 'Tu Rol');
+                break;
+            }
+        }
+        if (!activeRoleKey && schedules.length > 0) {
+            activeRoleKey = schedules[0].roleKey;
+            roleDisplayName = schedules[0].roleName || (ROODS_ROLES[activeRoleKey] ? ROODS_ROLES[activeRoleKey].name : 'Tu Rol');
+        }
     }
+    if (!activeRoleKey) activeRoleKey = 'matutinoCajeroBarista';
 
     const missionConfig = (roleMissions && roleMissions[activeRoleKey]) 
         ? roleMissions[activeRoleKey] 
@@ -2160,11 +2210,31 @@ function openGranMisionModal() {
     const badgeEl = document.getElementById('granMisionRoleBadge');
     const imgEl = document.getElementById('granMisionImg');
     const textEl = document.getElementById('granMisionText');
+    const pillsContainer = document.getElementById('granMisionRolePills');
 
     if (titleEl) titleEl.textContent = "🌟 La GRAN MISIÓN";
     if (badgeEl) badgeEl.textContent = missionConfig.title || roleDisplayName;
     if (imgEl) imgEl.src = missionConfig.image || "kru_welcome.png?v=2";
     if (textEl) textEl.textContent = missionConfig.description;
+
+    // Render switcher pills if employee has multiple schedules today
+    if (pillsContainer) {
+        if (schedules.length > 1) {
+            pillsContainer.style.display = 'flex';
+            pillsContainer.innerHTML = '';
+            schedules.forEach(s => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = s.roleDisplay || s.roleName;
+                const isSelected = (s.roleKey === activeRoleKey);
+                btn.style.cssText = `border: none; border-radius: 12px; padding: 4px 10px; font-size: 0.75rem; font-weight: 700; cursor: pointer; ${isSelected ? 'background: #e65100; color: white;' : 'background: #eee; color: #555;'}`;
+                btn.onclick = () => openGranMisionModal(s.roleKey);
+                pillsContainer.appendChild(btn);
+            });
+        } else {
+            pillsContainer.style.display = 'none';
+        }
+    }
 
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
@@ -2781,10 +2851,13 @@ function renderAdminSelectedChat() {
     const localMsgs = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
     // Filter messages between KRU/Admin and this specific employee
     const conversation = localMsgs.filter(m => {
-        const matchesRecipient = Number(m.recipient_id) === recipientId;
-        const matchesSenderId = m.sender_employee_id && Number(m.sender_employee_id) === recipientId;
-        const matchesSenderName = emp && (m.sender_name === emp.name || m.sender_name === emp.nickname);
-        return matchesRecipient || matchesSenderId || matchesSenderName;
+        // Sent to this employee by Admin / KRU
+        if (Number(m.recipient_id) === recipientId) return true;
+        // Sent by this employee to Admin / KRU
+        if (m.sender_employee_id && Number(m.sender_employee_id) === recipientId) return true;
+        if (m.sender_name && m.sender_name.includes(`#${recipientId}`)) return true;
+        if (emp && (m.sender_name === emp.name || m.sender_name === emp.nickname)) return true;
+        return false;
     });
 
     conversation.sort((a, b) => {
@@ -2800,18 +2873,18 @@ function renderAdminSelectedChat() {
 
     let html = '';
     conversation.forEach(m => {
-        const isFromKru = (m.sender_name === 'KRU' || m.sender_name === 'KRU (Gerencia Virtual)' || (!m.sender_employee_id && Number(m.recipient_id) === recipientId));
+        const isFromKru = (m.sender_name === 'KRU' || m.sender_name === 'KRU (Gerencia Virtual)' || (!m.sender_name.includes(`#${recipientId}`) && Number(m.recipient_id) === recipientId && (!m.sender_employee_id || Number(m.sender_employee_id) !== recipientId)));
         const senderLabel = isFromKru ? 'KRU 🤖' : empName;
         const align = isFromKru ? 'flex-end' : 'flex-start';
         const bg = isFromKru ? 'linear-gradient(135deg, #1976d2, #1565c0)' : '#f0f0f0';
         const color = isFromKru ? '#ffffff' : '#333333';
         const timeStr = m.created_at ? formatTimeString(m.created_at) : '';
-        const photoHtml = m.photo_url ? `<div style="margin-top: 6px;"><img src="${m.photo_url}" onclick="viewFullImage('${m.photo_url}')" style="max-width: 140px; max-height: 140px; border-radius: 6px; cursor: pointer; object-fit: cover; border: 1px solid rgba(0,0,0,0.1);"></div>` : '';
+        const photoHtml = m.photo_url ? `<div style="margin-top: 6px;"><img src="${m.photo_url}" onclick="viewFullImage('${m.photo_url}')" style="max-width: 100%; max-height: 180px; border-radius: 8px; cursor: pointer; object-fit: contain; background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.1);"></div>` : '';
 
         html += `
-            <div style="display: flex; flex-direction: column; align-items: ${align}; margin-bottom: 8px;">
+            <div style="display: flex; flex-direction: column; align-items: ${align}; margin-bottom: 8px; max-width: 100%;">
                 <span style="font-size: 0.7rem; color: #888; margin-bottom: 2px;">${senderLabel} · ${timeStr}</span>
-                <div style="background: ${bg}; color: ${color}; padding: 8px 12px; border-radius: 12px; max-width: 80%; word-break: break-word; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                <div style="background: ${bg}; color: ${color}; padding: 8px 12px; border-radius: 12px; max-width: 85%; word-break: break-word; overflow-wrap: anywhere; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                     ${m.message || ''}
                     ${photoHtml}
                 </div>
@@ -2827,11 +2900,16 @@ function renderAdminComunicados() {
     if (select) {
         const cur = select.value;
         let html = '<option value="">-- Selecciona Colaborador --</option>';
-        employees.filter(e => !e.is_admin).forEach(emp => {
+        const nonAdmins = employees.filter(e => !e.is_admin);
+        nonAdmins.forEach(emp => {
             html += `<option value="${emp.id}">${emp.nickname || emp.name}</option>`;
         });
         select.innerHTML = html;
-        if (cur) select.value = cur;
+        if (cur) {
+            select.value = cur;
+        } else if (nonAdmins.length > 0) {
+            select.value = nonAdmins[0].id;
+        }
     }
     loadRecentAnnouncements();
     renderAdminSelectedChat();
@@ -2850,19 +2928,22 @@ async function loadRecentAnnouncements() {
         const { data, error } = await supabaseClient
             .from('roods_announcements')
             .select('*')
+            .neq('created_by_name', 'SYSTEM_CONFIG')
             .order('created_at', { ascending: false })
-            .limit(5);
+            .limit(10);
             
         if (error) throw error;
         
-        if (!data || data.length === 0) {
+        const validAnnouncements = (data || []).filter(a => a.created_by_name !== 'SYSTEM_CONFIG');
+        
+        if (validAnnouncements.length === 0) {
             list.innerHTML = '<span style="color:#888;">No hay anuncios recientes.</span>';
             return;
         }
         
         let html = '';
-        data.forEach(a => {
-            html += `<div style="margin-bottom: 8px;">
+        validAnnouncements.forEach(a => {
+            html += `<div style="margin-bottom: 8px; word-break: break-word; overflow-wrap: anywhere;">
                 <strong>${formatTimeString(a.created_at)}</strong> - ${a.message}
             </div>`;
         });
@@ -4227,7 +4308,7 @@ async function saveCurrentRoleMission() {
     if (supabaseClient) {
         try {
             await supabaseClient.from('roods_announcements').insert({
-                message: JSON.stringify({ type: 'ROLE_MISSIONS_CONFIG', data: roleMissions }),
+                message: JSON.stringify({ type: 'ROLE_MISSIONS', data: roleMissions }),
                 created_by_name: 'SYSTEM_CONFIG'
             });
         } catch (e) {
@@ -4290,7 +4371,7 @@ async function saveSystemBanners() {
     if (supabaseClient) {
         try {
             await supabaseClient.from('roods_announcements').insert({
-                message: JSON.stringify({ type: 'APP_BANNERS_CONFIG', data: appBanners }),
+                message: JSON.stringify({ type: 'APP_BANNERS', data: appBanners }),
                 created_by_name: 'SYSTEM_CONFIG'
             });
         } catch (e) {
