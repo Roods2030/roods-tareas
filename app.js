@@ -80,14 +80,148 @@ let attendanceLogs = [];
 let swapRequests = [];
 let taskTemplates = [];
 let dailyTasks = []; // Active instances of tasks for the current day
-let muroMessages = []; // Muro de Avisos messages
-let lastReadMuroTimestamp = localStorage.getItem('roods_last_read_muro') || '1970-01-01T00:00:00.000Z';
 
 let currentPIN = "";
 let currentUser = null; // Currently logged in user
 let currentAdminTab = "monitoreo";
 let currentTaskTab = "mis-tareas";
 let expandedTaskIds = new Set();
+
+// --- Default Gran Misión Definitions per Role ---
+const DEFAULT_ROLE_MISSIONS = {
+    'matutinoCajeroBarista': {
+        title: 'CajiBari (Cajero + Barista Matutino)',
+        description: 'Ser la cara amable y enérgica que abre la sucursal. Brindar un servicio al cliente cálido y eficiente en caja mientras preparas bebidas de alta calidad con rapidez, limpieza y pasión. Tu misión es asegurar que cada cliente comience su día con la mejor experiencia ROODS.',
+        image: 'kru_welcome.png?v=2'
+    },
+    'matutinoCocinaBarista': {
+        title: 'CociBari (Cocina + Barista Matutino)',
+        description: 'Garantizar la frescura, sazón y presentación de cada platillo matutino junto con el soporte en la estación de café. Mantener la cocina y barra impecables, coordinando los tiempos para que los pedidos salgan frescos, deliciosos y a tiempo.',
+        image: 'kru_welcome.png?v=2'
+    },
+    'vespertinoCajero': {
+        title: 'Cajero (Turno Vespertino)',
+        description: 'Ofrecer una bienvenida cálida y atenta a cada cliente, gestionar los cobros con precisión y agilidad, resolver dudas sobre el menú y asegurar un corte de caja y cierre transparente, ordenado y exacto.',
+        image: 'kru_welcome.png?v=2'
+    },
+    'vespertinoBarista': {
+        title: 'Barista (Turno Vespertino)',
+        description: 'Crear la magia de las bebidas ROODS. Dominar la extracción de espresso, las texturas de leche y las especialidades, manteniendo la barra reluciente y cuidando cada detalle de calidad y presentación en cada taza.',
+        image: 'kru_welcome.png?v=2'
+    },
+    'vespertinoCocina': {
+        title: 'Cocina (Turno Vespertino)',
+        description: 'Elaborar cada orden con dedicación, consistencia y los más altos estándares de higiene y seguridad alimentaria. Velar por la rotación de insumos y dejar la estación desinfectada y lista para el siguiente día.',
+        image: 'kru_welcome.png?v=2'
+    },
+    'auxAdministrativo': {
+        title: 'Auxiliar Administrativo',
+        description: 'Supervisar la correcta operación de la sucursal, conciliar inventarios clave, apoyar en momentos de alta afluencia y verificar el cumplimiento de los estándares de calidad y orden del equipo.',
+        image: 'kru_avatar.jpg'
+    },
+    'apoyoCocina': {
+        title: 'Coci (Apoyo de Cocina)',
+        description: 'Brindar apoyo estratégico y ágil en la cocina: preparación previa de ingredientes, lavado de loza y utensilios, y agilización del pase de platillos para mantener un flujo continuo y ordenado.',
+        image: 'kru_avatar.jpg'
+    },
+    'apoyoMkt': {
+        title: 'Apoyo Marketing (MKT)',
+        description: 'Capturar momentos auténticos en sucursal, crear contenido dinámico para redes sociales, apoyar en la promoción de productos estrella y proyectar la calidez y personalidad de la marca ROODS.',
+        image: 'kru_avatar.jpg'
+    },
+    'apoyoGeneral': {
+        title: 'Apoyo General',
+        description: 'Ser el comodín y pilar de apoyo en piso y barra: mantener el salón limpio y acogedor, reabastecer estaciones de servicio, apoyar en horas pico y garantizar que la operación fluya sin tropiezos.',
+        image: 'kru_welcome.png?v=2'
+    }
+};
+
+let roleMissions = (() => {
+    try {
+        const saved = localStorage.getItem('roods_role_missions');
+        return saved ? { ...DEFAULT_ROLE_MISSIONS, ...JSON.parse(saved) } : { ...DEFAULT_ROLE_MISSIONS };
+    } catch(e) {
+        return { ...DEFAULT_ROLE_MISSIONS };
+    }
+})();
+
+// --- Default System Banners ---
+const DEFAULT_BANNERS = {
+    welcome: 'kru_welcome.png?v=2',
+    punctual: 'kru_punctual.png',
+    late: 'kru_late.png',
+    checkout: 'kru_checkout.png'
+};
+
+let appBanners = (() => {
+    try {
+        const saved = localStorage.getItem('roods_app_banners');
+        return saved ? { ...DEFAULT_BANNERS, ...JSON.parse(saved) } : { ...DEFAULT_BANNERS };
+    } catch(e) {
+        return { ...DEFAULT_BANNERS };
+    }
+})();
+
+function getBannerImage(type) {
+    if (appBanners && appBanners[type]) return appBanners[type];
+    return DEFAULT_BANNERS[type] || 'kru_welcome.png?v=2';
+}
+
+// Helper to compress image file to lightweight Base64 string
+function compressImageFile(file, maxWidth = 800, maxHeight = 800, quality = 0.72) {
+    return new Promise((resolve, reject) => {
+        if (!file) return resolve(null);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width = Math.round((width * maxHeight) / height);
+                        height = maxHeight;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = reject;
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+// Universal Task Order Calculator (matches template sequence & explicit Orden column)
+function getTaskOrder(task) {
+    if (!task) return 999999;
+    if (task.orden !== undefined && task.orden !== null && !isNaN(task.orden)) {
+        return Number(task.orden);
+    }
+    const idx = taskTemplates.findIndex(tmpl => {
+        if (tmpl['Tarea'] !== task.task_name) return false;
+        if (tmpl['Rol'] === task.role_name) return true;
+        if (typeof isRoleMatch === 'function' && isRoleMatch(tmpl['Rol'], [task.role_name])) return true;
+        return false;
+    });
+    if (idx !== -1) {
+        return (taskTemplates[idx].Orden !== undefined && taskTemplates[idx].Orden !== null) 
+            ? Number(taskTemplates[idx].Orden) 
+            : (idx + 1);
+    }
+    return 999999;
+}
 
 // Weekday Names in Spanish
 const WEEKDAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -268,13 +402,23 @@ async function syncFromCloud() {
 
         if (errAtt) throw errAtt;
         if (dbAtt) {
+            const validEmpIds = new Set(employees.map(e => Number(e.id)));
+            // Clean local attendanceLogs to permanently remove any orphaned test logs with non-existent employee_id
+            const initialCount = attendanceLogs.length;
+            attendanceLogs = attendanceLogs.filter(a => a && a.employee_id && validEmpIds.has(Number(a.employee_id)));
+            if (attendanceLogs.length !== initialCount) {
+                try { localStorage.setItem('roods_attendance', JSON.stringify(attendanceLogs)); } catch (e) {}
+            }
+
             const attMap = new Map();
             dbAtt.forEach(a => {
-                if (a && a.id) attMap.set(String(a.id), a);
+                if (a && a.id && a.employee_id && validEmpIds.has(Number(a.employee_id))) {
+                    attMap.set(String(a.id), a);
+                }
             });
             const unpushed = [];
             attendanceLogs.forEach(a => {
-                if (a && a.id) {
+                if (a && a.id && a.employee_id && validEmpIds.has(Number(a.employee_id))) {
                     if (!attMap.has(String(a.id))) {
                         if (!a.date || a.date >= attCutoffStr) {
                             attMap.set(String(a.id), a);
@@ -423,6 +567,32 @@ async function syncFromCloud() {
             }
         }
 
+        // 7. Sync System Configurations (Role Missions & System Banners)
+        try {
+            const { data: sysConfigs } = await supabaseClient
+                .from('roods_announcements')
+                .select('*')
+                .eq('created_by_name', 'SYSTEM_CONFIG')
+                .order('id', { ascending: false });
+
+            if (sysConfigs && sysConfigs.length > 0) {
+                sysConfigs.forEach(cfg => {
+                    try {
+                        const parsed = JSON.parse(cfg.message);
+                        if (parsed.type === 'ROLE_MISSIONS' && parsed.data) {
+                            roleMissions = { ...DEFAULT_ROLE_MISSIONS, ...parsed.data };
+                            localStorage.setItem('roods_role_missions', JSON.stringify(roleMissions));
+                        } else if (parsed.type === 'APP_BANNERS' && parsed.data) {
+                            appBanners = { ...DEFAULT_BANNERS, ...parsed.data };
+                            localStorage.setItem('roods_app_banners', JSON.stringify(appBanners));
+                        }
+                    } catch(e) {}
+                });
+            }
+        } catch(e) {
+            console.warn("Could not sync system configurations:", e);
+        }
+
         // Refresh UI with synced data
         if (currentUser) {
             const freshUser = employees.find(e => Number(e.id) === Number(currentUser.id));
@@ -470,12 +640,23 @@ async function pushToCloudTable(tableName, data) {
         let payload = Array.isArray(data) ? data : [data];
         if (tableName === 'roods_daily_tasks') {
             payload = payload.map(t => sanitizeDailyTask(t));
+        } else if (tableName === 'roods_attendance') {
+            const validEmpIds = new Set(employees.map(e => Number(e.id)));
+            payload = payload.filter(a => a && a.employee_id && validEmpIds.has(Number(a.employee_id)));
+            if (payload.length === 0) return;
         }
         const { error } = await supabaseClient.from(tableName).upsert(payload);
         if (error) throw error;
         setSyncIndicator("Cambio Sincronizado", "");
     } catch (e) {
         console.warn(`Could not sync table ${tableName} to cloud:`, e);
+        if (tableName === 'roods_attendance' && e && e.message && e.message.includes('foreign key constraint')) {
+            console.warn("Dropping invalid attendance logs violating foreign key constraint");
+            const validEmpIds = new Set(employees.map(emp => Number(emp.id)));
+            attendanceLogs = attendanceLogs.filter(a => a && a.employee_id && validEmpIds.has(Number(a.employee_id)));
+            try { localStorage.setItem('roods_attendance', JSON.stringify(attendanceLogs)); } catch(err) {}
+            return;
+        }
         setSyncIndicator("Offline (Local)", "");
         showNotification(`⚠️ Error al sincronizar ${tableName}: ${e.message || JSON.stringify(e)}`, 8000);
     }
@@ -640,7 +821,7 @@ function login() {
     } else {
         showSection('employeeSection');
         initEmployeeView();
-        showKruBannerModal('kru_welcome.png?v=2', '¡Comenzar Misión! 🚀');
+        showKruBannerModal(getBannerImage('welcome'), '¡Comenzar Misión! 🚀');
     }
     showNotification(`🔓 Bienvenido, ${currentUser.name}`);
 }
@@ -719,8 +900,7 @@ function initEmployeeView() {
     updateAttendanceUI(today, schedules);
 
 
-    // Muro de mensajes y mensajes privados load
-    loadMuroMessages();
+    // Mensajes privados load
     pollEmployeeMessages();
 }
 
@@ -1001,9 +1181,9 @@ function performCheckIn(roleKey) {
 
     // Trigger punctuality image banner
     if (isPunctual) {
-        showKruBannerModal('kru_punctual.png', '¡A Darlo Todo! 🚀');
+        showKruBannerModal(getBannerImage('punctual'), '¡A Darlo Todo! 🚀');
     } else {
-        showKruBannerModal('kru_late.png', '¡A Recuperarnos! 💪');
+        showKruBannerModal(getBannerImage('late'), '¡A Recuperarnos! 💪');
     }
 }
 
@@ -1091,7 +1271,7 @@ function performCheckOut(roleKey) {
     initEmployeeView();
 
     // Trigger check-out image banner
-    showKruBannerModal('kru_checkout.png', '¡Buen Descanso! 🌙');
+    showKruBannerModal(getBannerImage('checkout'), '¡Buen Descanso! 🌙');
 }
 
 // --- Daily Task Generation and Rendering ---
@@ -1289,55 +1469,33 @@ function deduplicateTaskInstances(rawTasks) {
 
 function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
     const myTasksList = document.getElementById('myTasksList');
-    const collabTasksList = document.getElementById('collabTasksList');
-
-    if (!myTasksList || !collabTasksList) return;
+    if (!myTasksList) return;
 
     myTasksList.innerHTML = "";
-    collabTasksList.innerHTML = "";
 
     // Filter today's tasks for active shifts
     const activeShifts = [...new Set(schedules.map(s => s.shift))];
     const todayTasks = dailyTasks.filter(d => {
         if (d.date !== dateStr) return false;
+        if (d.assigned_employee_id && Number(d.assigned_employee_id) === Number(currentUser.id)) {
+            return true;
+        }
         return isShiftMatch(d.shift, activeShifts);
     });
 
     // Individual tasks matching user's active roles or directly assigned to this employee
     const myTasksRaw = todayTasks.filter(t => {
-        const taskRole = t.assigned_role || t.role_name;
-        const matchesRole = isRoleMatch(taskRole, activeRolesList) || activeRolesList.includes(taskRole);
-        if (t.assigned_employee_id) {
-            return Number(t.assigned_employee_id) === Number(currentUser.id) && matchesRole;
+        // If assigned specifically to this employee (e.g. tomorrow/spontaneous task), ALWAYS include!
+        if (t.assigned_employee_id && Number(t.assigned_employee_id) === Number(currentUser.id)) {
+            return true;
         }
+        const taskRole = t.assigned_role || t.role_name;
+        if (taskRole === 'Colaborativa') return false; // Collaborative tasks eliminated
+        const matchesRole = isRoleMatch(taskRole, activeRolesList) || activeRolesList.includes(taskRole);
         return matchesRole;
     });
     const myTasks = deduplicateTaskInstances(myTasksRaw);
-    
-    // Collaborative tasks
-    const collabTasksRaw = todayTasks.filter(t => t.role_name === 'Colaborativa');
-    const collabTasks = deduplicateTaskInstances(collabTasksRaw);
-
-    // Sort function based on original template order / explicit Orden
-    const getTaskOrder = (task) => {
-        if (task.orden !== undefined && task.orden !== null && !isNaN(task.orden)) {
-            return Number(task.orden);
-        }
-        const idx = taskTemplates.findIndex(tmpl => {
-            if (tmpl['Tarea'] !== task.task_name) return false;
-            if (tmpl['Rol'] === task.role_name) return true;
-            if (tmpl['Rol'] === 'Colaborativa' && task.role_name === 'Colaborativa') return true;
-            if (typeof isRoleMatch === 'function' && isRoleMatch(tmpl['Rol'], [task.role_name])) return true;
-            return false;
-        });
-        if (idx !== -1) {
-            return (taskTemplates[idx].Orden !== undefined && taskTemplates[idx].Orden !== null) ? Number(taskTemplates[idx].Orden) : (idx + 1);
-        }
-        return 999999;
-    };
-
     myTasks.sort((a, b) => getTaskOrder(a) - getTaskOrder(b));
-    collabTasks.sort((a, b) => getTaskOrder(a) - getTaskOrder(b));
 
     // Render My Tasks
     if (myTasks.length === 0) {
@@ -1350,17 +1508,6 @@ function renderChecklistsForRoles(dateStr, activeRolesList, schedules) {
             const isReadOnly = isEmployeeShiftCompletedForTask(task);
             const item = createTaskItemElement(task, false, isReadOnly);
             myTasksList.appendChild(item);
-        });
-    }
-
-    // Render Collaborative Tasks
-    if (collabTasks.length === 0) {
-        collabTasksList.innerHTML = '<div class="empty-state"><span class="empty-state-icon">📋</span>No hay tareas colaborativas asignadas para tus turnos hoy</div>';
-    } else {
-        collabTasks.forEach(task => {
-            const isReadOnly = isEmployeeShiftCompletedForTask(task);
-            const item = createTaskItemElement(task, true, isReadOnly);
-            collabTasksList.appendChild(item);
         });
     }
 
@@ -1692,53 +1839,60 @@ function updateTaskProgress(myTasks) {
 }
 
 function switchTaskTab(tabId) {
+    if (tabId !== 'mensajes') tabId = 'mis-tareas';
     currentTaskTab = tabId;
-    document.getElementById('tabMisTareas').className = `tab-btn ${tabId === 'mis-tareas' ? 'active' : ''}`;
-    document.getElementById('tabColaborativas').className = `tab-btn ${tabId === 'colaborativas' ? 'active' : ''}`;
-    document.getElementById('tabMensajes').className = `tab-btn ${tabId === 'mensajes' ? 'active' : ''}`;
-    document.getElementById('tabMuroAvisos').className = `tab-btn ${tabId === 'muro-avisos' ? 'active' : ''}`;
+    const tabMis = document.getElementById('tabMisTareas');
+    const tabMsg = document.getElementById('tabMensajes');
+    const cntMis = document.getElementById('contentMisTareas');
+    const cntMsg = document.getElementById('contentMensajes');
 
-    document.getElementById('contentMisTareas').className = `tab-content ${tabId === 'mis-tareas' ? 'active' : ''}`;
-    document.getElementById('contentColaborativas').className = `tab-content ${tabId === 'colaborativas' ? 'active' : ''}`;
-    document.getElementById('contentMensajes').className = `tab-content ${tabId === 'mensajes' ? 'active' : ''}`;
-    document.getElementById('contentMuroAvisos').className = `tab-content ${tabId === 'muro-avisos' ? 'active' : ''}`;
+    if (tabMis) tabMis.className = `tab-btn ${tabId === 'mis-tareas' ? 'active' : ''}`;
+    if (tabMsg) tabMsg.className = `tab-btn ${tabId === 'mensajes' ? 'active' : ''}`;
+    if (cntMis) cntMis.className = `tab-content ${tabId === 'mis-tareas' ? 'active' : ''}`;
+    if (cntMsg) cntMsg.className = `tab-content ${tabId === 'mensajes' ? 'active' : ''}`;
 
-    if (tabId === 'muro-avisos') {
-        if (muroMessages.length > 0) {
-            lastReadMuroTimestamp = muroMessages[muroMessages.length - 1].timestamp;
-        } else {
-            lastReadMuroTimestamp = new Date().toISOString();
-        }
-        localStorage.setItem('roods_last_read_muro', lastReadMuroTimestamp);
-        updateMuroBadge();
-    }
-    
     if (tabId === 'mensajes') {
         pollEmployeeMessages();
         markPrivateMessagesAsRead();
     }
 }
 
-// --- EMPLOYEE MESSAGING LOGIC ---
+// --- EMPLOYEE MESSAGING LOGIC (Two-Way with KRU) ---
 let hasShownGlobalAnnounce = false;
+let tempEmpPhotoBase64 = null;
+
+function isMessageForUserConversation(m, user) {
+    if (!m || !user) return false;
+    // Messages sent by KRU to this employee
+    if (Number(m.recipient_id) === Number(user.id)) return true;
+    // Messages sent by this employee to KRU (recipient_id 99 or admin)
+    const sender = String(m.sender_name || '');
+    if (sender.includes(`#${user.id}`) || sender === user.name || sender === user.nickname) {
+        return true;
+    }
+    return false;
+}
 
 async function pollEmployeeMessages() {
-    if (!currentUser || currentUser.is_admin) return;
+    if (!currentUser) return;
     
     // Check local messages first for instant rendering
     let localMessages = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
-    let myLocal = localMessages.filter(m => Number(m.recipient_id) === Number(currentUser.id));
-    if (myLocal.length > 0) {
-        renderPrivateMessages(myLocal);
+    if (!currentUser.is_admin) {
+        let myLocal = localMessages.filter(m => isMessageForUserConversation(m, currentUser));
+        if (myLocal.length > 0) {
+            renderPrivateMessages(myLocal);
+        }
     }
 
-    // 1. Check Global Announcements
-    if (supabaseClient && !hasShownGlobalAnnounce) {
+    // 1. Check Global Announcements (excluding SYSTEM_CONFIG)
+    if (supabaseClient && !hasShownGlobalAnnounce && !currentUser.is_admin) {
         try {
             const lastLoginStr = localStorage.getItem('roods_last_login_time') || new Date(Date.now() - 24*60*60*1000).toISOString();
             const { data } = await supabaseClient
                 .from('roods_announcements')
                 .select('*')
+                .neq('created_by_name', 'SYSTEM_CONFIG')
                 .gt('created_at', lastLoginStr)
                 .order('created_at', { ascending: false })
                 .limit(1);
@@ -1768,31 +1922,33 @@ async function pollEmployeeMessages() {
             const { data, error } = await supabaseClient
                 .from('roods_private_messages')
                 .select('*')
-                .eq('recipient_id', currentUser.id)
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: true });
                 
             if (!error && data) {
                 const map = new Map();
                 data.forEach(m => map.set(String(m.id || m.created_at), m));
-                myLocal.forEach(m => {
+                localMessages.forEach(m => {
                     const key = String(m.id || m.created_at);
                     if (!map.has(key)) map.set(key, m);
                 });
-                const merged = Array.from(map.values()).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-                
-                const otherLocal = localMessages.filter(m => Number(m.recipient_id) !== Number(currentUser.id));
-                localStorage.setItem('roods_private_messages', JSON.stringify([...otherLocal, ...merged]));
+                const allMerged = Array.from(map.values()).sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+                localStorage.setItem('roods_private_messages', JSON.stringify(allMerged));
 
-                renderPrivateMessages(merged);
-                
-                const unreadCount = merged.filter(m => !m.read).length;
-                const badge = document.getElementById('mensajesBadgeDot');
-                if (badge) {
-                    if (unreadCount > 0 && currentTaskTab !== 'mensajes') {
-                        badge.classList.remove('hidden');
-                    } else {
-                        badge.classList.add('hidden');
+                if (!currentUser.is_admin) {
+                    const myMsgs = allMerged.filter(m => isMessageForUserConversation(m, currentUser));
+                    renderPrivateMessages(myMsgs);
+                    
+                    const unreadCount = myMsgs.filter(m => Number(m.recipient_id) === Number(currentUser.id) && !m.read).length;
+                    const badge = document.getElementById('mensajesBadgeDot');
+                    if (badge) {
+                        if (unreadCount > 0 && currentTaskTab !== 'mensajes') {
+                            badge.classList.remove('hidden');
+                        } else {
+                            badge.classList.add('hidden');
+                        }
                     }
+                } else {
+                    renderAdminSelectedChat();
                 }
             }
         } catch (e) {
@@ -1801,33 +1957,144 @@ async function pollEmployeeMessages() {
     }
 }
 
+function handleEmpPhotoSelected(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    compressImageFile(file, 800, 800, 0.72).then(base64 => {
+        tempEmpPhotoBase64 = base64;
+        const prev = document.getElementById('empPhotoPreview');
+        const cont = document.getElementById('empPhotoPreviewContainer');
+        if (prev && cont) {
+            prev.src = base64;
+            cont.style.display = 'flex';
+        }
+    }).catch(err => {
+        console.error("Error compressing employee photo:", err);
+        alert("No se pudo procesar la foto.");
+    });
+}
+
+function clearEmpPhotoPreview() {
+    tempEmpPhotoBase64 = null;
+    const cont = document.getElementById('empPhotoPreviewContainer');
+    const input = document.getElementById('employeeMessagePhoto');
+    if (cont) cont.style.display = 'none';
+    if (input) input.value = '';
+}
+
+async function sendEmployeeMessageToKru(event) {
+    event.preventDefault();
+    if (!currentUser) return;
+    const input = document.getElementById('employeeMessageInput');
+    const text = input ? input.value.trim() : '';
+
+    if (!text && !tempEmpPhotoBase64) {
+        alert("Escribe un mensaje o adjunta una foto para enviar a KRU.");
+        return;
+    }
+
+    const adminEmp = employees.find(e => e.is_admin) || { id: 99 };
+    const senderLabel = `${currentUser.nickname || currentUser.name} (#${currentUser.id})`;
+    const nowIso = new Date().toISOString();
+
+    const newMsg = {
+        id: Date.now(),
+        sender_name: senderLabel,
+        recipient_id: Number(adminEmp.id),
+        message: text,
+        photo_url: tempEmpPhotoBase64 || null,
+        read: false,
+        created_at: nowIso
+    };
+
+    let localMsgs = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
+    localMsgs.push(newMsg);
+    localStorage.setItem('roods_private_messages', JSON.stringify(localMsgs));
+
+    if (input) input.value = '';
+    clearEmpPhotoPreview();
+    showNotification("🚀 Mensaje enviado a KRU exitosamente.");
+
+    // Update conversation view immediately
+    const myConversation = localMsgs.filter(m => isMessageForUserConversation(m, currentUser));
+    renderPrivateMessages(myConversation);
+
+    if (supabaseClient) {
+        try {
+            const dbPayload = {
+                sender_name: senderLabel,
+                recipient_id: Number(adminEmp.id),
+                message: text,
+                photo_url: newMsg.photo_url,
+                read: false
+            };
+            const { error } = await supabaseClient.from('roods_private_messages').insert(dbPayload);
+            if (error) console.warn("Supabase insert error (saved locally):", error);
+        } catch(e) {
+            console.error("Error pushing message to cloud:", e);
+        }
+    }
+}
+
+function viewFullImage(url) {
+    if (!url) return;
+    showKruBannerModal(url, 'Cerrar Vista ✕');
+}
+
 function renderPrivateMessages(messages) {
     const list = document.getElementById('myMessagesList');
     if (!list) return;
     
     if (messages.length === 0) {
-        list.innerHTML = '<div class="empty-state">No tienes mensajes.</div>';
+        list.innerHTML = '<div class="empty-state">No tienes mensajes nuevos. ¡Escríbele a KRU ante cualquier duda o novedad del turno!</div>';
         return;
     }
     
+    // Sort chronologically (oldest at top, newest at bottom)
+    const sorted = [...messages].sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+    
     let html = '';
-    messages.forEach(m => {
-        const isAdminMsg = m.sender_name && (m.sender_name.includes('RH') || m.sender_name.includes('Administrador') || m.sender_name.includes('KRU') || m.sender_name.includes('Gerencia'));
-        const senderLabel = isAdminMsg ? 'KRU (Gerencia Virtual)' : m.sender_name;
-        const avatarHtml = isAdminMsg 
-            ? `<img src="kru_avatar.jpg" alt="KRU" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 1px solid #1976d2;">`
-            : '';
-        const bg = m.read ? 'rgba(255,255,255,0.4)' : 'rgba(25, 118, 210, 0.1)';
-        const border = m.read ? '1px solid #ddd' : '1px solid #1976d2';
-        html += `<div style="background: ${bg}; border: ${border}; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <div>${avatarHtml}<strong style="color: #1976d2; vertical-align: middle;">De: ${senderLabel}</strong></div>
-                <span style="font-size: 0.75rem; color: #888;">${formatTimeString(m.created_at)}</span>
+    sorted.forEach(m => {
+        const isFromKru = (Number(m.recipient_id) === Number(currentUser.id)) || 
+            (m.sender_name && (m.sender_name.includes('KRU') || m.sender_name.includes('Gerencia') || m.sender_name.includes('RH') || m.sender_name.includes('Administrador')));
+        
+        const photoHtml = m.photo_url ? `
+            <div style="margin-top: 8px;">
+                <img src="${m.photo_url}" alt="Foto adjunta" style="max-width: 100%; max-height: 200px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.1); cursor: pointer; object-fit: contain; background: rgba(0,0,0,0.02);" onclick="viewFullImage('${m.photo_url}')" title="Haz clic para ver tamaño completo">
             </div>
-            <div style="font-size: 0.9rem; color: #333; line-height: 1.4;">${m.message}</div>
-        </div>`;
+        ` : '';
+
+        if (isFromKru) {
+            // KRU message aligned left
+            html += `
+                <div style="align-self: flex-start; max-width: 85%; background: rgba(25, 118, 210, 0.08); border: 1px solid rgba(25, 118, 210, 0.25); border-radius: 12px 12px 12px 2px; padding: 10px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <img src="kru_avatar.jpg" alt="KRU" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover; border: 1px solid #1976d2;">
+                            <strong style="color: #1976d2; font-size: 0.8rem;">KRU (Gerencia Virtual)</strong>
+                        </div>
+                        <span style="font-size: 0.68rem; color: #777;">${formatTimeString(m.created_at)}</span>
+                    </div>
+                    <div style="font-size: 0.9rem; color: #222; line-height: 1.4; white-space: pre-wrap;">${m.message || ''}</div>
+                    ${photoHtml}
+                </div>
+            `;
+        } else {
+            // Employee message aligned right
+            html += `
+                <div style="align-self: flex-end; max-width: 85%; background: rgba(46, 125, 50, 0.09); border: 1px solid rgba(46, 125, 50, 0.25); border-radius: 12px 12px 2px 12px; padding: 10px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); text-align: right;">
+                    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 4px;">
+                        <span style="font-size: 0.68rem; color: #777;">${formatTimeString(m.created_at)}</span>
+                        <strong style="color: #2e7d32; font-size: 0.8rem;">Tú (${currentUser.nickname || currentUser.name})</strong>
+                    </div>
+                    <div style="font-size: 0.9rem; color: #222; line-height: 1.4; text-align: left; white-space: pre-wrap;">${m.message || ''}</div>
+                    ${photoHtml}
+                </div>
+            `;
+        }
     });
     list.innerHTML = html;
+    list.scrollTop = list.scrollHeight;
 }
 
 async function markPrivateMessagesAsRead() {
@@ -1865,12 +2132,58 @@ function acknowledgeGlobalAnnounce() {
     document.getElementById('globalAnnounceModal').classList.add('hidden');
 }
 
+// --- Gran Misión Modal Logic ---
+function openGranMisionModal() {
+    if (!currentUser) return;
+    const modal = document.getElementById('granMisionModal');
+    if (!modal) return;
+
+    const today = new Date();
+    const schedules = resolveTodaySchedules(currentUser.id, today);
+    let activeRoleKey = 'matutinoCajeroBarista';
+    let roleDisplayName = 'Colaborador';
+
+    if (schedules.length > 0) {
+        activeRoleKey = schedules[0].roleKey;
+        roleDisplayName = schedules[0].roleName || (ROODS_ROLES[activeRoleKey] ? ROODS_ROLES[activeRoleKey].name : 'Tu Rol');
+    }
+
+    const missionConfig = (roleMissions && roleMissions[activeRoleKey]) 
+        ? roleMissions[activeRoleKey] 
+        : (DEFAULT_ROLE_MISSIONS[activeRoleKey] || {
+            title: roleDisplayName,
+            description: "Cumplir con excelencia cada una de tus misiones, brindar un servicio cálido a los clientes y cuidar cada detalle de calidad y limpieza en tu turno.",
+            image: "kru_welcome.png?v=2"
+        });
+
+    const titleEl = document.getElementById('granMisionTitle');
+    const badgeEl = document.getElementById('granMisionRoleBadge');
+    const imgEl = document.getElementById('granMisionImg');
+    const textEl = document.getElementById('granMisionText');
+
+    if (titleEl) titleEl.textContent = "🌟 La GRAN MISIÓN";
+    if (badgeEl) badgeEl.textContent = missionConfig.title || roleDisplayName;
+    if (imgEl) imgEl.src = missionConfig.image || "kru_welcome.png?v=2";
+    if (textEl) textEl.textContent = missionConfig.description;
+
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+}
+
+function closeGranMisionModal() {
+    const modal = document.getElementById('granMisionModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
+}
+
 function showKruBannerModal(imageSrc, buttonText) {
     const imgEl = document.getElementById('kruWelcomeModalImg');
     const btnEl = document.getElementById('kruWelcomeModalBtn');
     const modal = document.getElementById('kruWelcomeModal');
     
-    if (imgEl) imgEl.src = imageSrc;
+    if (imgEl) imgEl.src = imageSrc || getBannerImage('welcome');
     if (btnEl && buttonText) btnEl.textContent = buttonText;
     
     if (modal) {
@@ -1880,7 +2193,7 @@ function showKruBannerModal(imageSrc, buttonText) {
 }
 
 function showKruWelcomeModal() {
-    showKruBannerModal('kru_welcome.png?v=2', '¡Comenzar Misión! 🚀');
+    showKruBannerModal(getBannerImage('welcome'), '¡Comenzar Misión! 🚀');
 }
 
 function dismissKruWelcomeModal() {
@@ -1931,19 +2244,13 @@ function switchAdminTab(tabId) {
         renderAdminAttendance();
         if (typeof syncFromCloud === 'function') syncFromCloud();
     }
-    if (tabId === 'roles') renderAdminWeeklyRoles();
+    if (tabId === 'roles') {
+        renderAdminWeeklyRoles();
+        if (typeof loadRoleMissionEditor === 'function') loadRoleMissionEditor();
+        if (typeof loadSystemBannersEditor === 'function') loadSystemBannersEditor();
+    }
     if (tabId === 'tareas-csv') renderAdminCsvView();
     if (tabId === 'empleados') renderAdminEmployees();
-    if (tabId === 'muro-avisos-admin') {
-        loadMuroMessages();
-        if (muroMessages.length > 0) {
-            lastReadMuroTimestamp = muroMessages[muroMessages.length - 1].timestamp;
-        } else {
-            lastReadMuroTimestamp = new Date().toISOString();
-        }
-        localStorage.setItem('roods_last_read_muro', lastReadMuroTimestamp);
-        updateMuroBadge();
-    }
 }
 
 // --- ADMIN TAB: MONITOREO ---
@@ -1951,6 +2258,7 @@ function renderAdminMonitoreo() {
     const grid = document.getElementById('monitoreoGrid');
     if (!grid) return;
     grid.innerHTML = "";
+    populateTomorrowEmployees();
 
     const today = new Date();
     const todayStr = formatDateString(today);
@@ -2002,17 +2310,17 @@ function renderAdminMonitoreo() {
             const activeRoles = [...sched.roles, sched.roleName, sched.roleKey];
             const empTasksRaw = dailyTasks.filter(d => {
                 if (d.date !== todayStr) return false;
+                if (d.assigned_employee_id) {
+                    return Number(d.assigned_employee_id) === Number(emp.id);
+                }
                 const taskRole = d.assigned_role || d.role_name;
                 const matchesRole = isRoleMatch(taskRole, activeRoles) || taskRole === sched.roleName || taskRole === sched.roleKey;
                 const matchesShift = isShiftMatch(d.shift, [sched.shift]);
-                if (d.assigned_employee_id) {
-                    return Number(d.assigned_employee_id) === Number(emp.id) && matchesRole && matchesShift;
-                } else {
-                    return matchesShift && matchesRole;
-                }
+                return matchesShift && matchesRole;
             });
             
             const empTasks = deduplicateTaskInstances(empTasksRaw);
+            empTasks.sort((a, b) => getTaskOrder(a) - getTaskOrder(b));
             
             const total = empTasks.length;
             const completed = empTasks.filter(t => t.completed).length;
@@ -2105,97 +2413,6 @@ function renderAdminMonitoreo() {
         });
     });
 
-    // Render single collaborative tasks card for the whole day
-    const collabTasksRaw = dailyTasks.filter(d => d.date === todayStr && d.role_name === 'Colaborativa');
-    const collabTasks = [];
-    const seenCollabTasks = new Set();
-    collabTasksRaw.forEach(t => {
-        if (!seenCollabTasks.has(t.task_name)) {
-            seenCollabTasks.add(t.task_name);
-            collabTasks.push(t);
-        }
-    });
-
-    if (collabTasks.length > 0) {
-        const total = collabTasks.length;
-        const completed = collabTasks.filter(t => t.completed).length;
-        const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
-
-        let collabDetailsHtml = "";
-        collabDetailsHtml = `<div class="monitor-tasks-list" style="margin-top: 12px; font-size: 0.8rem; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">`;
-        collabTasks.forEach(t => {
-            const statusIcon = t.completed ? "✅" : "⏳";
-            const byText = t.completed && t.completed_by_name ? ` ${t.completed_by_name.split(' ')[0]}` : "";
-            const timeText = t.completed && t.completed_at ? ` (${formatTimeString(t.completed_at)})` : "";
-            const color = t.completed ? "#9c27b0" : "#888";
-            const textDecoration = t.completed ? "line-through" : "none";
-            const deleteBtnHtml = `<span onclick="deleteActiveTask('${t.id}')" style="cursor: pointer; color: #ff5252; margin-left: 8px; font-weight: bold; font-size: 0.85rem;" title="Eliminar tarea para hoy">🗑️</span>`;
-            const hasSubtasks = t.subtasks_state && t.subtasks_state.length > 0;
-            const completedCount = hasSubtasks ? t.subtasks_state.filter(s => s.completed).length : 0;
-            const subtaskSummary = hasSubtasks ? ` <span style="font-size: 0.7rem; color: #777;">(${completedCount}/${t.subtasks_state.length})</span>` : "";
-            
-            let subtasksHtml = "";
-            if (hasSubtasks) {
-                subtasksHtml = `<div id="subtasks-collab-${t.id}" style="display: none; padding-left: 20px; font-size: 0.75rem; margin-top: 4px; color: #555;">`;
-                t.subtasks_state.forEach(st => {
-                    const stIcon = st.completed ? "☑️" : "☐";
-                    subtasksHtml += `<div style="margin-bottom: 2px;">${stIcon} ${st.name}</div>`;
-                });
-                subtasksHtml += `</div>`;
-            }
-            
-            const toggleAttr = hasSubtasks ? `onclick="const el = document.getElementById('subtasks-collab-${t.id}'); el.style.display = el.style.display === 'none' ? 'block' : 'none';" style="cursor: pointer;" title="Haz clic para ver subtareas"` : "";
-
-            collabDetailsHtml += `
-            <div style="margin-bottom: 6px;">
-                <div style="color: ${color}; display: flex; justify-content: space-between; align-items: center; text-decoration: ${textDecoration};" ${toggleAttr}>
-                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; display: flex; align-items: center; gap: 4px;">${statusIcon} ${t.task_name}${subtaskSummary} ${hasSubtasks ? '▾' : ''}</span>
-                    <div style="display: flex; align-items: center; text-decoration: none;" onclick="event.stopPropagation()">
-                        <span style="font-weight: 600; flex-shrink: 0; font-size: 0.75rem;">${byText}${timeText}</span>
-                        ${deleteBtnHtml}
-                    </div>
-                </div>
-                ${subtasksHtml}
-            </div>`;
-        });
-        collabDetailsHtml += `</div>`;
-
-        const card = document.createElement('div');
-        card.className = "monitor-card";
-        card.style.borderColor = "#9c27b0";
-        card.innerHTML = `
-            <h4 style="color: #9c27b0;">Tareas Colaborativas</h4>
-            <p class="monitor-meta">Todo el día</p>
-            <p class="monitor-meta">Estatus: Activas hoy</p>
-            <div class="progress-summary" style="margin-top: 15px;">
-                <div class="progress-text-container">
-                    <span>Tareas (${completed}/${total})</span>
-                    <span>${percent}%</span>
-                </div>
-                <div class="progress-bar-bg">
-                    <div class="progress-bar-fill" style="width: ${percent}%; background: linear-gradient(to right, #9c27b0, #e91e63);"></div>
-                </div>
-            </div>
-            ${collabDetailsHtml}
-
-            <!-- Quick Collab Task Form -->
-            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <input type="text" id="quickTaskName-collab-Todos" placeholder="Nueva tarea colab..." class="form-control" style="font-size:0.75rem; padding: 4px 8px; margin: 0; flex-grow: 1; height: 28px;">
-                    <button class="btn-primary" onclick="addQuickTask('collab', 'Todos', 'Todos', 'Colaborativa')" style="font-size:0.75rem; padding: 4px 10px; margin: 0; border: none; border-radius: 4px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; background: linear-gradient(135deg, #9c27b0, #e91e63); color: white; cursor: pointer;">➕</button>
-                </div>
-                <div style="display: flex; align-items: center; gap: 12px; font-size: 0.7rem; color: var(--text-secondary);">
-                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; margin: 0; font-weight: normal;">
-                        <input type="checkbox" id="quickTaskMandatory-collab-Todos" style="margin: 0; transform: scale(0.9);"> ⭐ ¿Obligatoria?
-                    </label>
-                    <span style="color: #ccc;">|</span>
-                    <span style="font-style: italic; color: #888;">Sólo para hoy</span>
-                </div>
-            </div>
-        `;
-        grid.appendChild(card);
-    }
-
     if (!hasScheduled) {
         grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;">📋 No hay roles semanales programados para la semana actual. Ve a la pestaña "Roles Semanales" para asignar personal.</div>`;
     }
@@ -2203,68 +2420,99 @@ function renderAdminMonitoreo() {
     renderTomorrowTasks();
 }
 
+function populateTomorrowEmployees() {
+    const sel = document.getElementById('tomorrowTaskEmployee');
+    if (!sel) return;
+    const currentVal = sel.value;
+    sel.innerHTML = '<option value="">-- Seleccionar colaborador --</option>';
+    employees.filter(e => !e.is_admin).forEach(emp => {
+        const opt = document.createElement('option');
+        opt.value = emp.id;
+        opt.textContent = emp.nickname ? `${emp.nickname} (${emp.name})` : emp.name;
+        sel.appendChild(opt);
+    });
+    if (currentVal) sel.value = currentVal;
+}
+
 // --- TOMORROW TASKS LOGIC ---
 async function sendTomorrowTask(event) {
     event.preventDefault();
-    const taskText = document.getElementById('tomorrowTaskText').value.trim();
-    const targetRole = document.getElementById('tomorrowTaskTarget').value;
-    const targetShift = document.getElementById('tomorrowTaskShift').value;
-    
-    if (!taskText) return;
-    
+    const taskInput = document.getElementById('tomorrowTaskText');
+    const empSelect = document.getElementById('tomorrowTaskEmployee');
+    if (!taskInput || !empSelect) return;
+
+    const taskText = taskInput.value.trim();
+    const empId = Number(empSelect.value);
+    if (!taskText || !empId) {
+        alert("Por favor selecciona un colaborador y escribe la misión.");
+        return;
+    }
+
+    const targetEmp = employees.find(e => Number(e.id) === empId);
+    const empName = targetEmp ? (targetEmp.nickname || targetEmp.name) : 'Personal';
+
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = formatDateString(tomorrow);
-    
+
     const newTomorrowTask = {
         id: `manual_tmrw_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         date: tomorrowStr,
-        shift: targetShift,
-        role_name: targetRole === 'Todos' ? 'Colaborativa' : targetRole,
+        shift: 'Ambos',
+        role_name: empName,
         task_name: taskText,
         completed: false,
-        is_collaborative: targetRole === 'Todos',
+        is_collaborative: false,
         subtasks_state: [],
         Imprescindible: 'No',
         is_urgent: false,
         urgent_acknowledged: false,
-        assigned_role: targetRole === 'Todos' ? 'Colaborativa' : targetRole,
+        assigned_role: empName,
+        assigned_employee_id: empId,
+        assigned_employee_name: empName,
         is_manual: true
     };
-    
+
     dailyTasks.push(newTomorrowTask);
     saveLocalDatabase();
-    
-    document.getElementById('tomorrowTaskText').value = "";
-    showNotification("📆 Tarea programada para mañana con éxito.");
-    
+
+    taskInput.value = "";
+    showNotification(`📆 Misión para mañana asignada a ${empName} con éxito.`);
+
     if (supabaseClient) {
         pushToCloudTable('roods_daily_tasks', newTomorrowTask);
     }
-    
+
     renderTomorrowTasks();
 }
 
 function renderTomorrowTasks() {
     const list = document.getElementById('tomorrowTasksList');
     if (!list) return;
-    
+
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = formatDateString(tomorrow);
-    
+
     const tomorrowTasks = dailyTasks.filter(t => t.date === tomorrowStr);
-    
+
     if (tomorrowTasks.length === 0) {
-        list.innerHTML = `<span style="color: #888;">No hay tareas programadas para mañana todavía.</span>`;
+        list.innerHTML = `<span style="color: #888;">No hay misiones programadas para mañana todavía.</span>`;
         return;
     }
-    
+
     let html = "";
     tomorrowTasks.forEach(t => {
-        const deleteBtnHtml = `<span onclick="deleteActiveTask('${t.id}')" style="cursor: pointer; color: #ff5252; margin-left: 8px; font-weight: bold; font-size: 0.85rem;" title="Eliminar tarea">🗑️</span>`;
-        html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <span><strong style="color: #1976d2;">[${t.shift} | ${t.role_name}]</strong> ${t.task_name}</span>
+        let empLabel = t.assigned_employee_name || '';
+        if (!empLabel && t.assigned_employee_id) {
+            const f = employees.find(e => Number(e.id) === Number(t.assigned_employee_id));
+            if (f) empLabel = f.nickname || f.name;
+        }
+        if (!empLabel) empLabel = t.role_name || 'Personal';
+
+        const deleteBtnHtml = `<span onclick="deleteActiveTask('${t.id}')" style="cursor: pointer; color: #ff5252; margin-left: 8px; font-weight: bold; font-size: 0.85rem;" title="Eliminar misión">🗑️</span>`;
+        html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding: 4px 6px; background: #f9f9f9; border-radius: 4px;">
+            <span><strong style="color: #1976d2;">[Para: ${empLabel}]</strong> ${t.task_name}</span>
             ${deleteBtnHtml}
         </div>`;
     });
@@ -2485,60 +2733,108 @@ async function renderHistorialTasks() {
         grid.appendChild(card);
     });
 
-    // Render Collaborative tasks card if any
-    const collabTasksRaw = dateTasks.filter(t => t.role_name === 'Colaborativa' || t.is_collaborative);
-    const collabTasks = deduplicateTaskInstances(collabTasksRaw);
-    if (collabTasks.length > 0) {
-        const total = collabTasks.length;
-        const completed = collabTasks.filter(t => t.completed).length;
-        const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
 
-        let collabHtml = `<div class="monitor-tasks-list" style="margin-top: 10px; font-size: 0.8rem; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">`;
-        collabTasks.forEach(t => {
-            const statusIcon = t.completed ? "✅" : "⏳";
-            const color = t.completed ? "#9c27b0" : "#888";
-            const byText = t.completed && t.completed_by_name ? ` (Por: ${t.completed_by_name.split(' ')[0]})` : "";
-            const timeText = t.completed && t.completed_at ? ` [${formatTimeString(t.completed_at)}]` : "";
-            collabHtml += `
-                <div style="color: ${color}; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;" title="${t.task_name}">${statusIcon} ${t.task_name}</span>
-                    <span style="font-weight: 600; flex-shrink: 0; font-size: 0.7rem;">${timeText}${byText}</span>
-                </div>`;
-        });
-        collabHtml += `</div>`;
-
-        const card = document.createElement('div');
-        card.className = "monitor-card";
-        card.style.borderColor = "#9c27b0";
-        card.innerHTML = `
-            <h4 style="margin: 0; color: #9c27b0;">Tareas Colaborativas</h4>
-            <p class="monitor-meta" style="margin-top: 2px;">Todo el día</p>
-            <div class="progress-summary" style="margin-top: 10px;">
-                <div class="progress-text-container" style="font-size: 0.75rem;">
-                    <span>Completadas (${completed}/${total})</span>
-                    <span>${percent}%</span>
-                </div>
-                <div class="progress-bar-bg" style="height: 6px;">
-                    <div class="progress-bar-fill" style="width: ${percent}%; background: linear-gradient(to right, #9c27b0, #e91e63);"></div>
-                </div>
-            </div>
-            ${collabHtml}
-        `;
-        grid.appendChild(card);
-    }
 }
 
 // --- ADMIN TAB: COMUNICADOS ---
+let tempAdminPhotoBase64 = null;
+
+async function handleAdminPhotoPreview(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    try {
+        tempAdminPhotoBase64 = await compressImageFile(file, 800, 800, 0.72);
+        const prevImg = document.getElementById('adminPhotoPreview');
+        const container = document.getElementById('adminPhotoPreviewContainer');
+        if (prevImg && container) {
+            prevImg.src = tempAdminPhotoBase64;
+            container.style.display = 'flex';
+        }
+    } catch (e) {
+        console.error("Error al procesar foto para admin:", e);
+        showNotification("No se pudo cargar la imagen.");
+    }
+}
+
+function clearAdminPhotoPreview() {
+    tempAdminPhotoBase64 = null;
+    const input = document.getElementById('privateMessagePhoto');
+    if (input) input.value = '';
+    const container = document.getElementById('adminPhotoPreviewContainer');
+    if (container) container.style.display = 'none';
+}
+
+function renderAdminSelectedChat() {
+    const container = document.getElementById('adminChatMessagesList');
+    const select = document.getElementById('privateMessageRecipient');
+    if (!container || !select) return;
+
+    const recipientId = Number(select.value);
+    if (!recipientId) {
+        container.innerHTML = '<span style="color: #888;">Selecciona un colaborador para ver la conversación.</span>';
+        return;
+    }
+
+    const emp = employees.find(e => Number(e.id) === recipientId);
+    const empName = emp ? (emp.nickname || emp.name) : `Colaborador #${recipientId}`;
+
+    const localMsgs = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
+    // Filter messages between KRU/Admin and this specific employee
+    const conversation = localMsgs.filter(m => {
+        const matchesRecipient = Number(m.recipient_id) === recipientId;
+        const matchesSenderId = m.sender_employee_id && Number(m.sender_employee_id) === recipientId;
+        const matchesSenderName = emp && (m.sender_name === emp.name || m.sender_name === emp.nickname);
+        return matchesRecipient || matchesSenderId || matchesSenderName;
+    });
+
+    conversation.sort((a, b) => {
+        const tA = new Date(a.created_at || a.timestamp || 0).getTime();
+        const tB = new Date(b.created_at || b.timestamp || 0).getTime();
+        return tA - tB;
+    });
+
+    if (conversation.length === 0) {
+        container.innerHTML = `<span style="color: #888;">Aún no hay mensajes intercambiados con ${empName}.</span>`;
+        return;
+    }
+
+    let html = '';
+    conversation.forEach(m => {
+        const isFromKru = (m.sender_name === 'KRU' || m.sender_name === 'KRU (Gerencia Virtual)' || (!m.sender_employee_id && Number(m.recipient_id) === recipientId));
+        const senderLabel = isFromKru ? 'KRU 🤖' : empName;
+        const align = isFromKru ? 'flex-end' : 'flex-start';
+        const bg = isFromKru ? 'linear-gradient(135deg, #1976d2, #1565c0)' : '#f0f0f0';
+        const color = isFromKru ? '#ffffff' : '#333333';
+        const timeStr = m.created_at ? formatTimeString(m.created_at) : '';
+        const photoHtml = m.photo_url ? `<div style="margin-top: 6px;"><img src="${m.photo_url}" onclick="viewFullImage('${m.photo_url}')" style="max-width: 140px; max-height: 140px; border-radius: 6px; cursor: pointer; object-fit: cover; border: 1px solid rgba(0,0,0,0.1);"></div>` : '';
+
+        html += `
+            <div style="display: flex; flex-direction: column; align-items: ${align}; margin-bottom: 8px;">
+                <span style="font-size: 0.7rem; color: #888; margin-bottom: 2px;">${senderLabel} · ${timeStr}</span>
+                <div style="background: ${bg}; color: ${color}; padding: 8px 12px; border-radius: 12px; max-width: 80%; word-break: break-word; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    ${m.message || ''}
+                    ${photoHtml}
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+    container.scrollTop = container.scrollHeight;
+}
+
 function renderAdminComunicados() {
     const select = document.getElementById('privateMessageRecipient');
     if (select) {
+        const cur = select.value;
         let html = '<option value="">-- Selecciona Colaborador --</option>';
         employees.filter(e => !e.is_admin).forEach(emp => {
             html += `<option value="${emp.id}">${emp.nickname || emp.name}</option>`;
         });
         select.innerHTML = html;
+        if (cur) select.value = cur;
     }
     loadRecentAnnouncements();
+    renderAdminSelectedChat();
 }
 
 async function loadRecentAnnouncements() {
@@ -2603,23 +2899,34 @@ async function sendGlobalAnnouncement(event) {
 
 async function sendPrivateMessage(event) {
     event.preventDefault();
-    const recipientId = document.getElementById('privateMessageRecipient').value;
-    const text = document.getElementById('privateMessageText').value.trim();
+    const recipientSelect = document.getElementById('privateMessageRecipient');
+    const textInput = document.getElementById('privateMessageText');
+    if (!recipientSelect || !textInput) return;
+
+    const recipientId = recipientSelect.value;
+    const text = textInput.value.trim();
+    const photo = tempAdminPhotoBase64 || null;
     
-    if (!recipientId || !text) {
-        alert("Selecciona un destinatario y escribe un mensaje.");
+    if (!recipientId) {
+        alert("Selecciona un destinatario.");
+        return;
+    }
+
+    if (!text && !photo) {
+        alert("Escribe un mensaje o adjunta una foto.");
         return;
     }
 
     const numRecipientId = parseInt(recipientId, 10);
-    const sender = currentUser.nickname || currentUser.name;
+    const sender = "KRU";
     const nowIso = new Date().toISOString();
     
     const obj = {
         id: Date.now(),
         sender_name: sender,
         recipient_id: numRecipientId,
-        message: text,
+        message: text || (photo ? '📷 [Foto adjunta]' : ''),
+        photo_url: photo,
         read: false,
         created_at: nowIso
     };
@@ -2629,20 +2936,30 @@ async function sendPrivateMessage(event) {
     localMsgs.push(obj);
     localStorage.setItem('roods_private_messages', JSON.stringify(localMsgs));
     
-    showNotification("✉️ Mensaje privado enviado exitosamente.");
-    document.getElementById('privateMessageText').value = "";
-    document.getElementById('privateMessageRecipient').value = "";
+    showNotification("✉️ Mensaje enviado como KRU exitosamente.");
+    textInput.value = "";
+    clearAdminPhotoPreview();
+    renderAdminSelectedChat();
 
     if (supabaseClient) {
         try {
             const dbPayload = {
                 sender_name: sender,
                 recipient_id: numRecipientId,
-                message: text,
+                message: obj.message,
+                photo_url: photo,
                 read: false
             };
             const { error } = await supabaseClient.from('roods_private_messages').insert(dbPayload);
-            if (error) throw error;
+            if (error) {
+                // If photo_url column is missing in DB schema, retry without it
+                if (String(error.message || '').includes('photo_url')) {
+                    delete dbPayload.photo_url;
+                    await supabaseClient.from('roods_private_messages').insert(dbPayload);
+                } else {
+                    throw error;
+                }
+            }
         } catch(e) {
             console.error("Supabase insert error (saved locally):", e);
         }
@@ -3838,193 +4155,148 @@ async function submitProfileForm(event) {
     }
 }
 
-// --- MURO DE AVISOS REAL-TIME ---
-async function loadMuroMessages() {
-    const list = document.getElementById('muroMessagesList');
-    const adminList = document.getElementById('adminMuroMessagesList');
-    if (!list && !adminList) return;
+// --- ROLE MISSIONS ("LA GRAN MISIÓN") ADMIN EDITOR ---
+function loadRoleMissionEditor() {
+    const roleSelect = document.getElementById('granMisionRoleSelect');
+    const descInput = document.getElementById('granMisionDescInput');
+    const imgPreview = document.getElementById('granMisionImgPreview');
+    if (!roleSelect || !descInput || !imgPreview) return;
 
-    if (supabaseClient) {
-        try {
-            const { data, error } = await supabaseClient
-                .from('roods_messages')
-                .select('*')
-                .order('timestamp', { ascending: false })
-                .limit(40);
-            if (!error && data) {
-                muroMessages = data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-                localStorage.setItem('roods_muro_messages', JSON.stringify(muroMessages));
-            }
-        } catch (e) {
-            console.warn("Could not load messages from Supabase, loading local cache:", e);
-        }
-    }
-
-    if (muroMessages.length === 0) {
-        muroMessages = JSON.parse(localStorage.getItem('roods_muro_messages')) || [];
-    }
-
-    renderMuroMessages();
-    updateMuroBadge();
-}
-
-function renderMuroMessages() {
-    const list = document.getElementById('muroMessagesList');
-    const adminList = document.getElementById('adminMuroMessagesList');
-    if (!list && !adminList) return;
-
-    let listHtml = "";
-    if (muroMessages.length === 0) {
-        listHtml = '<div class="empty-state" style="padding:15px; font-size:0.85rem;"><span class="empty-state-icon" style="font-size:1.5rem;">💬</span>No hay avisos recientes. ¡Escribe el primero!</div>';
-    } else {
-        muroMessages.forEach(msg => {
-            const sender = employees.find(e => e.id === msg.employee_id || e.name === msg.employee_name);
-            const isAdminSender = (sender && sender.is_admin) || (msg.employee_name && (msg.employee_name.includes('RH') || msg.employee_name.includes('Administrador') || msg.employee_name.includes('KRU')));
-            const photoSrc = isAdminSender ? 'kru_avatar.jpg' : ((sender && sender.photo) ? sender.photo : '');
-            const displayName = isAdminSender ? 'KRU (Gerencia Virtual)' : ((sender && sender.nickname) ? sender.nickname : msg.employee_name);
-
-            listHtml += `
-                <div class="muro-msg-item">
-                    <div class="profile-pic-container" style="width: 32px; height: 32px; border-width: 1px;">
-                        <img src="${photoSrc}" alt="Avatar" class="avatar-img" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23888888%22%3E%3Cpath%20d%3D%22M12%202C6.48%202%202%206.48%202%2012s4.48%2010%2010%2010%2010-4.48%2010-10S17.52%202%2012%202zm0%203c1.66%200%203%201.34%203%203s-1.34%203-3%203-3-1.34-3-3%201.34-3%203-3zm0%2014.2c-2.5%200-4.71-1.28-6-3.22.03-1.99%204-3.08%206-3.08%201.99%200%205.97%201.09%206%203.08-1.29%201.94-3.5%203.22-6%203.22z%22%2F%3E%3C%2Fsvg%3E'">
-                    </div>
-                    <div class="muro-msg-content">
-                        <div class="muro-msg-header">
-                            <span class="muro-msg-sender">${displayName}</span>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span class="muro-msg-time">${timeStr}</span>
-                                ${(currentUser && currentUser.is_admin && msg.id) ? `<button onclick="deleteMuroMessage(${msg.id})" style="background: none; border: none; color: #f44336; cursor: pointer; padding: 0 4px; font-size: 0.9rem;" title="Eliminar mensaje">🗑️</button>` : ''}
-                            </div>
-                        </div>
-                        <span class="muro-msg-text">${msg.message}</span>
-                    </div>
-                </div>
-            `;
-        });
-    }
-
-    if (list) {
-        list.innerHTML = listHtml;
-        list.scrollTop = list.scrollHeight;
-    }
-    if (adminList) {
-        adminList.innerHTML = listHtml;
-        adminList.scrollTop = adminList.scrollHeight;
-    }
-}
-
-async function deleteMuroMessage(id) {
-    if (!confirm("¿Seguro que quieres borrar este mensaje del muro?")) return;
-    
-    // Optimistic delete
-    muroMessages = muroMessages.filter(m => m.id !== id);
-    renderMuroMessages();
-    
-    if (supabaseClient) {
-        try {
-            const { error } = await supabaseClient.from('roods_messages').delete().eq('id', id);
-            if (error) throw error;
-        } catch (e) {
-            console.error("Error deleting message:", e);
-            showNotification("Error al borrar el mensaje.");
-            loadMuroMessages(); // Reload from DB
-        }
-    }
-}
-
-function updateMuroBadge() {
-    const hasUnread = muroMessages.some(msg => msg.timestamp > lastReadMuroTimestamp);
-    
-    const empDot = document.getElementById('muroBadgeDot');
-    const adminDot = document.getElementById('adminMuroBadgeDot');
-    
-    if (hasUnread) {
-        if (empDot && currentTaskTab !== 'muro-avisos') empDot.classList.remove('hidden');
-        if (adminDot && currentAdminTab !== 'muro-avisos-admin') adminDot.classList.remove('hidden');
-    } else {
-        if (empDot) empDot.classList.add('hidden');
-        if (adminDot) adminDot.classList.add('hidden');
-    }
-}
-
-async function sendMuroMessage(event) {
-    event.preventDefault();
-    const input = document.getElementById('muroMessageInput');
-    if (!input) return;
-    const text = input.value.trim();
-    if (!text) return;
-
-    input.value = "";
-    await pushNewMuroMessage(text);
-}
-
-async function sendAdminMuroMessage(event) {
-    event.preventDefault();
-    const input = document.getElementById('adminMuroMessageInput');
-    if (!input) return;
-    const text = input.value.trim();
-    if (!text) return;
-
-    input.value = "";
-    await pushNewMuroMessage(text);
-}
-
-async function pushNewMuroMessage(text) {
-    const newMsg = {
-        id: Date.now(),
-        employee_id: currentUser.id,
-        employee_name: currentUser.nickname || currentUser.name,
-        message: text,
-        timestamp: new Date().toISOString()
+    const roleKey = roleSelect.value;
+    const mission = roleMissions[roleKey] || DEFAULT_ROLE_MISSIONS[roleKey] || {
+        title: roleKey,
+        description: '',
+        image: 'kru_welcome.png?v=2'
     };
 
-    muroMessages.push(newMsg);
-    renderMuroMessages();
-    localStorage.setItem('roods_muro_messages', JSON.stringify(muroMessages));
+    descInput.value = mission.description || '';
+    imgPreview.src = mission.image || 'kru_welcome.png?v=2';
+}
 
-    // Update timestamp for sender to mark as read
-    lastReadMuroTimestamp = newMsg.timestamp;
-    localStorage.setItem('roods_last_read_muro', lastReadMuroTimestamp);
-    updateMuroBadge();
+async function handleRoleMissionPhotoUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    try {
+        const base64 = await compressImageFile(file, 600, 600, 0.75);
+        const imgPreview = document.getElementById('granMisionImgPreview');
+        if (imgPreview && base64) {
+            imgPreview.src = base64;
+        }
+    } catch (e) {
+        console.error("Error al comprimir foto de rol:", e);
+        showNotification("No se pudo cargar la imagen del rol.");
+    }
+}
 
+function restoreDefaultRolePhoto() {
+    const roleSelect = document.getElementById('granMisionRoleSelect');
+    const imgPreview = document.getElementById('granMisionImgPreview');
+    if (!roleSelect || !imgPreview) return;
+
+    const roleKey = roleSelect.value;
+    const defaultData = DEFAULT_ROLE_MISSIONS[roleKey];
+    imgPreview.src = (defaultData && defaultData.image) || 'kru_welcome.png?v=2';
+}
+
+async function saveCurrentRoleMission() {
+    const roleSelect = document.getElementById('granMisionRoleSelect');
+    const descInput = document.getElementById('granMisionDescInput');
+    const imgPreview = document.getElementById('granMisionImgPreview');
+    if (!roleSelect || !descInput || !imgPreview) return;
+
+    const roleKey = roleSelect.value;
+    const desc = descInput.value.trim();
+    const imgSrc = imgPreview.src;
+
+    if (!roleMissions[roleKey]) {
+        roleMissions[roleKey] = { ...(DEFAULT_ROLE_MISSIONS[roleKey] || { title: roleKey }) };
+    }
+
+    roleMissions[roleKey].description = desc;
+    roleMissions[roleKey].image = imgSrc;
+
+    try {
+        localStorage.setItem('roods_role_missions', JSON.stringify(roleMissions));
+    } catch (e) {
+        console.warn("Storage quota warning:", e);
+    }
+
+    showNotification("💾 'La GRAN MISIÓN' actualizada con éxito.");
+
+    // Sync to cloud configuration
     if (supabaseClient) {
         try {
-            const dbObj = {
-                employee_id: newMsg.employee_id,
-                employee_name: newMsg.employee_name,
-                message: newMsg.message
-            };
-            const { error } = await supabaseClient.from('roods_messages').insert(dbObj);
-            if (error) throw error;
+            await supabaseClient.from('roods_announcements').insert({
+                message: JSON.stringify({ type: 'ROLE_MISSIONS_CONFIG', data: roleMissions }),
+                created_by_name: 'SYSTEM_CONFIG'
+            });
         } catch (e) {
-            console.error("Failed to post message to Supabase:", e);
-            showNotification("⚠️ Mensaje guardado localmente (Offline).");
+            console.warn("Could not sync role missions to cloud:", e);
         }
     }
 }
 
-function subscribeToMuroMessages() {
-    if (!supabaseClient) return;
-    
-    supabaseClient
-        .channel('muro-messages')
-        .on(
-            'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'roods_messages' },
-            (payload) => {
-                const newMsg = payload.new;
-                if (!newMsg) return;
+// --- SYSTEM BANNERS ADMIN EDITOR ---
+function loadSystemBannersEditor() {
+    const types = ['welcome', 'punctual', 'late', 'checkout'];
+    types.forEach(type => {
+        const img = document.getElementById(`bannerPrev_${type}`);
+        if (img) {
+            img.src = getBannerImage(type);
+        }
+    });
+}
 
-                if (!muroMessages.some(m => m.id === newMsg.id)) {
-                    muroMessages.push(newMsg);
-                    muroMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-                    renderMuroMessages();
-                    localStorage.setItem('roods_muro_messages', JSON.stringify(muroMessages));
-                    updateMuroBadge();
-                }
-            }
-        )
-        .subscribe();
+async function handleBannerFileSelect(event, type) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    try {
+        const base64 = await compressImageFile(file, 800, 800, 0.75);
+        const img = document.getElementById(`bannerPrev_${type}`);
+        if (img && base64) {
+            img.src = base64;
+        }
+    } catch (e) {
+        console.error("Error al procesar banner:", e);
+        showNotification("No se pudo cargar el banner.");
+    }
+}
+
+function restoreBannerDefault(type) {
+    const img = document.getElementById(`bannerPrev_${type}`);
+    if (img) {
+        img.src = DEFAULT_BANNERS[type] || 'kru_welcome.png?v=2';
+    }
+}
+
+async function saveSystemBanners() {
+    const types = ['welcome', 'punctual', 'late', 'checkout'];
+    types.forEach(type => {
+        const img = document.getElementById(`bannerPrev_${type}`);
+        if (img && img.src) {
+            appBanners[type] = img.src;
+        }
+    });
+
+    try {
+        localStorage.setItem('roods_app_banners', JSON.stringify(appBanners));
+    } catch (e) {
+        console.warn("Storage quota warning:", e);
+    }
+
+    showNotification("💾 Banners e imágenes del sistema guardados con éxito.");
+
+    // Sync to cloud configuration
+    if (supabaseClient) {
+        try {
+            await supabaseClient.from('roods_announcements').insert({
+                message: JSON.stringify({ type: 'APP_BANNERS_CONFIG', data: appBanners }),
+                created_by_name: 'SYSTEM_CONFIG'
+            });
+        } catch (e) {
+            console.warn("Could not sync banners to cloud:", e);
+        }
+    }
 }
 
 function subscribeToAttendance() {
@@ -4121,7 +4393,6 @@ function initApp() {
             console.log("Supabase client initialized successfully.");
             syncFromCloud();
             subscribeToAllDailyTasks();
-            subscribeToMuroMessages();
             subscribeToAttendance();
             subscribeToPrivateMessages();
         } else {

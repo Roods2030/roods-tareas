@@ -120,8 +120,13 @@
                                 <h2 id="employeeWelcome" style="margin: 0;">¡Hola, Empleado!</h2>
                                 <button onclick="openProfileModal()" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 0; line-height: 1;">✏️</button>
                             </div>
-                            <div class="user-role-badge" id="employeeRolesContainer" style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px;">
-                                <!-- Dynamic Badges -->
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
+                                <div class="user-role-badge" id="employeeRolesContainer" style="display: flex; flex-direction: column; gap: 4px;">
+                                    <!-- Dynamic Badges -->
+                                </div>
+                                <button type="button" class="btn-gran-mision" onclick="openGranMisionModal()" style="display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #FFB300, #FB8C00); color: white; border: none; padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 0.8rem; cursor: pointer; box-shadow: 0 3px 8px rgba(251, 140, 0, 0.35); text-transform: uppercase; letter-spacing: 0.5px;">
+                                    🌟 La GRAN MISIÓN
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -162,9 +167,7 @@
                     <!-- Task Sub-Tabs -->
                     <div class="tab-navigation sub-nav employee-tabs" style="margin-top: 15px;">
                         <button class="tab-btn active" id="tabMisTareas" onclick="switchTaskTab('mis-tareas')">Mis Misiones</button>
-                        <button class="tab-btn" id="tabColaborativas" onclick="switchTaskTab('colaborativas')">Misiones Turno</button>
-                        <button class="tab-btn" id="tabMensajes" onclick="switchTaskTab('mensajes')">Mensajes <span class="badge-dot hidden" id="mensajesBadgeDot"></span></button>
-                        <button class="tab-btn" id="tabMuroAvisos" onclick="switchTaskTab('muro-avisos')">Muro Avisos 💬 <span class="badge-dot hidden" id="muroBadgeDot"></span></button>
+                        <button class="tab-btn" id="tabMensajes" onclick="switchTaskTab('mensajes')">Mensajes a KRU ✉️ <span class="badge-dot hidden" id="mensajesBadgeDot"></span></button>
                     </div>
 
                     <!-- Task Lists -->
@@ -173,26 +176,41 @@
                             <!-- Populated by JS -->
                         </div>
                     </div>
-                    <div class="tab-content" id="contentColaborativas">
-                        <div class="task-list" id="collabTasksList">
-                            <!-- Populated by JS -->
-                        </div>
-                    </div>
                     
-                    <!-- Mensajes Privados List -->
+                    <!-- Mensajes a KRU (Two-Way Conversation with Photo Attachments) -->
                     <div class="tab-content" id="contentMensajes">
-                        <div class="task-list" id="myMessagesList">
-                            <div class="empty-state">No tienes mensajes nuevos.</div>
-                        </div>
-                    </div>
-                    <div class="tab-content" id="contentMuroAvisos">
-                        <div class="muro-container" style="display: flex; flex-direction: column; gap: 15px; background: rgba(255, 255, 255, 0.4); padding: 15px; border-radius: var(--border-radius-medium); border: 1px solid rgba(255,255,255,0.3);">
-                            <div class="muro-messages-list" id="muroMessagesList" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px;">
-                                <!-- Messages dynamically loaded -->
+                        <div class="kru-chat-card" style="display: flex; flex-direction: column; gap: 12px; background: rgba(255, 255, 255, 0.7); padding: 16px; border-radius: var(--border-radius-medium); border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
+                            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.06); padding-bottom: 10px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <img src="kru_avatar.jpg" alt="KRU" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid #1976d2;">
+                                    <div>
+                                        <strong style="color: #1976d2; font-size: 0.95rem; display: block;">KRU (Gerencia Virtual)</strong>
+                                        <span style="font-size: 0.75rem; color: #666;">Canal directo y privado de gerencia</span>
+                                    </div>
+                                </div>
+                                <span style="font-size: 0.75rem; background: #e8f5e9; color: #2e7d32; font-weight: 700; padding: 3px 8px; border-radius: 10px;">● En línea</span>
                             </div>
-                            <form id="muroMessageForm" onsubmit="sendMuroMessage(event)" style="display: flex; gap: 10px; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 10px; margin: 0;">
-                                <input type="text" id="muroMessageInput" class="form-control" placeholder="Escribe una nota para el turno..." required style="flex-grow: 1;">
-                                <button type="submit" class="btn-primary" style="padding: 10px 20px; font-size: 0.95rem;">Enviar 🚀</button>
+
+                            <div class="kru-messages-thread" id="myMessagesList" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px 4px;">
+                                <div class="empty-state">No tienes mensajes nuevos. ¡Escríbele a KRU ante cualquier duda o novedad del turno!</div>
+                            </div>
+
+                            <form id="employeeReplyForm" onsubmit="sendEmployeeMessageToKru(event)" style="border-top: 1px solid rgba(0,0,0,0.08); padding-top: 10px; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+                                <div id="empPhotoPreviewContainer" style="display: none; align-items: center; gap: 10px; background: #f0f4f8; padding: 6px 12px; border-radius: 8px;">
+                                    <img id="empPhotoPreview" src="" alt="Vista previa" style="width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid #ccc;">
+                                    <span style="font-size: 0.8rem; color: #333; flex-grow: 1;">Foto adjunta lista</span>
+                                    <button type="button" onclick="clearEmpPhotoPreview()" style="background: none; border: none; font-size: 1.1rem; color: #ff5252; cursor: pointer;">✕</button>
+                                </div>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <input type="text" id="employeeMessageInput" class="form-control" placeholder="Escribe un mensaje para KRU..." required style="flex-grow: 1; padding: 10px 14px; font-size: 0.9rem;">
+                                    <label for="employeeMessagePhoto" style="cursor: pointer; background: #f0f4f8; border: 1px solid #ccd6e0; border-radius: 8px; padding: 8px 12px; font-size: 1.1rem; margin: 0; display: flex; align-items: center; justify-content: center;" title="Adjuntar foto">
+                                        📷
+                                    </label>
+                                    <input type="file" id="employeeMessagePhoto" accept="image/*" style="display: none;" onchange="handleEmpPhotoSelected(event)">
+                                    <button type="submit" class="btn-primary" style="padding: 10px 18px; font-size: 0.95rem; font-weight: 700; background: #1976d2; border: none; border-radius: 8px; color: white; cursor: pointer; white-space: nowrap;">
+                                        Enviar 🚀
+                                    </button>
+                                </div>
                             </form>
                         </div>
                     </div>
@@ -232,7 +250,6 @@
                     <button class="tab-btn" id="tabTareasCsv" onclick="switchAdminTab('tareas-csv')">Misiones CSV</button>
                     <button class="tab-btn" id="tabEmpleados" onclick="switchAdminTab('empleados')">Empleados</button>
                     <button class="tab-btn" id="tabComunicados" onclick="switchAdminTab('comunicados')">Comunicados 📢</button>
-                    <button class="tab-btn" id="tabMuroAvisosAdmin" onclick="switchAdminTab('muro-avisos-admin')">Muro de Avisos 💬 <span class="badge-dot hidden" id="adminMuroBadgeDot"></span></button>
                 </div>
 
                 <!-- ADMIN TAB CONTENT: MONITOREO -->
@@ -250,37 +267,20 @@
                             <h3 style="margin-bottom: 5px; font-size: 0.95rem; color: var(--primary-gradient-start); display: flex; align-items: center; gap: 6px;">
                                 <span>📅</span> Misiones para Mañana
                             </h3>
-                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Programa misiones espontáneas que aparecerán mañana.</p>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">Programa misiones para mañana asignadas específicamente a una persona.</p>
                             
                             <form id="tomorrowTaskForm" onsubmit="sendTomorrowTask(event)">
                                 <div class="form-group" style="margin-bottom: 12px;">
-                                    <label for="tomorrowTaskText" style="font-size: 0.75rem; font-weight:700;">Tarea:</label>
+                                    <label for="tomorrowTaskText" style="font-size: 0.75rem; font-weight:700;">Misión / Tarea:</label>
                                     <input type="text" id="tomorrowTaskText" required class="form-control" placeholder="Ej. Recibir pedido de leche" style="padding: 8px 12px; font-size: 0.9rem;">
                                 </div>
-                                <div class="form-group" style="margin-bottom: 12px;">
-                                    <label for="tomorrowTaskTarget" style="font-size: 0.75rem; font-weight:700;">Destinatario:</label>
-                                    <select id="tomorrowTaskTarget" class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
-                                        <option value="Todos">Colaborativa (Todos)</option>
-                                        <option value="CajiBari">Rol: CajiBari</option>
-                                        <option value="CociBari">Rol: CociBari</option>
-                                        <option value="Cajero">Rol: Cajero</option>
-                                        <option value="Barista">Rol: Barista</option>
-                                        <option value="Cocina">Rol: Cocina</option>
-                                        <option value="Aux. Administrativo">Rol: Aux. Administrativo</option>
-                                        <option value="Coci">Rol: Coci</option>
-                                        <option value="Apoyo MKT">Rol: Apoyo MKT</option>
-                                        <option value="Apoyo General">Rol: Apoyo General</option>
-                                    </select>
-                                </div>
                                 <div class="form-group" style="margin-bottom: 15px;">
-                                    <label for="tomorrowTaskShift" style="font-size: 0.75rem; font-weight:700;">Turno:</label>
-                                    <select id="tomorrowTaskShift" class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
-                                        <option value="Ambos">Ambos / Todos</option>
-                                        <option value="Matutino">Matutino</option>
-                                        <option value="Vespertino">Vespertino</option>
+                                    <label for="tomorrowTaskEmployee" style="font-size: 0.75rem; font-weight:700;">Colaborador (Destinatario):</label>
+                                    <select id="tomorrowTaskEmployee" required class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
+                                        <!-- Populated dynamically with active employees -->
                                     </select>
                                 </div>
-                                <button type="submit" class="btn-submit" style="margin-top: 0; padding: 10px; font-size: 0.9rem; background: #1976d2;">Agregar Tarea 📆</button>
+                                <button type="submit" class="btn-submit" style="margin-top: 0; padding: 10px; font-size: 0.9rem; background: #1976d2;">Asignar Misión para Mañana 📆</button>
                             </form>
                             
                             <div id="tomorrowTasksList" style="margin-top: 15px; border-top: 1px dashed rgba(0,0,0,0.1); padding-top: 10px; font-size: 0.8rem;">
@@ -328,26 +328,37 @@
                         
                         <!-- Mensajes Privados -->
                         <div class="card glass" style="padding: 20px;">
-                            <h3 style="color: #1976d2; margin-bottom: 5px;">Mensaje Privado Directo ✉️</h3>
-                            <p style="font-size: 0.8rem; color: #666; margin-bottom: 15px;">Envía un mensaje específico a un empleado (con opción de foto).</p>
+                            <h3 style="color: #1976d2; margin-bottom: 5px;">Mensajes a Colaboradores (como KRU) ✉️</h3>
+                            <p style="font-size: 0.8rem; color: #666; margin-bottom: 15px;">Envía mensajes que los empleados recibirán en "Mensajes a KRU", donde podrán responderte con texto y fotos.</p>
                             
                             <form id="privateMessageForm" onsubmit="sendPrivateMessage(event)">
                                 <div class="form-group" style="margin-bottom: 12px;">
                                     <label for="privateMessageRecipient" style="font-size: 0.8rem; font-weight:700;">Destinatario:</label>
-                                    <select id="privateMessageRecipient" required class="form-control" style="padding: 8px 12px; font-size: 0.9rem;">
+                                    <select id="privateMessageRecipient" required class="form-control" style="padding: 8px 12px; font-size: 0.9rem;" onchange="renderAdminSelectedChat()">
                                         <!-- JS -->
                                     </select>
                                 </div>
                                 <div class="form-group" style="margin-bottom: 12px;">
                                     <label for="privateMessageText" style="font-size: 0.8rem; font-weight:700;">Mensaje:</label>
-                                    <textarea id="privateMessageText" required class="form-control" rows="3" placeholder="Por favor revisa el inventario..." style="padding: 8px 12px; font-size: 0.9rem; resize: vertical;"></textarea>
+                                    <textarea id="privateMessageText" required class="form-control" rows="3" placeholder="Escribe el mensaje como KRU..." style="padding: 8px 12px; font-size: 0.9rem; resize: vertical;"></textarea>
                                 </div>
                                 <div class="form-group" style="margin-bottom: 12px;">
                                     <label for="privateMessagePhoto" style="font-size: 0.8rem; font-weight:700;">Foto Adjunta (Opcional):</label>
-                                    <input type="file" id="privateMessagePhoto" accept="image/*" class="form-control" style="font-size: 0.8rem; background: white;">
+                                    <input type="file" id="privateMessagePhoto" accept="image/*" class="form-control" style="font-size: 0.8rem; background: white;" onchange="handleAdminPhotoPreview(event)">
+                                    <div id="adminPhotoPreviewContainer" style="display: none; margin-top: 8px; align-items: center; gap: 8px;">
+                                        <img id="adminPhotoPreview" src="" alt="Vista previa" style="max-height: 80px; border-radius: 6px; border: 1px solid #ccc;">
+                                        <button type="button" onclick="clearAdminPhotoPreview()" style="background: none; border: none; color: #ff5252; cursor: pointer;">✕ Quitar</button>
+                                    </div>
                                 </div>
-                                <button type="submit" class="btn-submit" style="margin-top: 5px; padding: 10px; background: #1976d2;">Enviar Mensaje ✉️</button>
+                                <button type="submit" class="btn-submit" style="margin-top: 5px; padding: 10px; background: #1976d2;">Enviar como KRU ✉️</button>
                             </form>
+
+                            <div id="adminChatContainer" style="margin-top: 15px; border-top: 1px dashed rgba(0,0,0,0.15); padding-top: 12px;">
+                                <h4 style="font-size: 0.85rem; color: #555; margin-bottom: 8px;">Historial de Conversación con el Colaborador</h4>
+                                <div id="adminChatMessagesList" style="max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; padding: 4px;">
+                                    <span style="color: #888;">Selecciona un colaborador para ver la conversación.</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -451,6 +462,119 @@
                         </div>
                     </div>
                     <p class="save-status" id="rolesSaveStatus">Roles guardados automáticamente 💾</p>
+
+                    <!-- CONFIGURACIÓN DE LA GRAN MISIÓN -->
+                    <div class="card glass" style="margin-top: 25px; padding: 20px; border-radius: 12px; background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(255, 255, 255, 0.5);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
+                            <h3 style="color: #f57c00; margin: 0; display: flex; align-items: center; gap: 8px;">
+                                <span>🌟</span> Configuración de "La GRAN MISIÓN" por Rol
+                            </h3>
+                            <button type="button" class="btn-primary" onclick="saveCurrentRoleMission()" style="padding: 8px 18px; font-size: 0.85rem; background: linear-gradient(135deg, #FFB300, #FB8C00); border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer;">
+                                Guardar Misión de Rol 💾
+                            </button>
+                        </div>
+                        <p style="font-size: 0.85rem; color: #555; margin-bottom: 15px;">
+                            Personaliza la descripción e imagen representativa que cada colaborador verá al presionar "🌟 La GRAN MISIÓN" según su rol en turno.
+                        </p>
+
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label for="granMisionRoleSelect" style="font-weight: 700; font-size: 0.85rem;">Selecciona el Rol a configurar:</label>
+                            <select id="granMisionRoleSelect" class="form-control" onchange="loadRoleMissionEditor()" style="padding: 10px; font-size: 0.95rem; font-weight: 600;">
+                                <option value="matutinoCajeroBarista">CajiBari (Matutino 9:30 - 17:30)</option>
+                                <option value="matutinoCocinaBarista">CociBari (Matutino 9:30 - 17:30)</option>
+                                <option value="vespertinoCajero">Cajero (Vespertino 17:00 - 22:30)</option>
+                                <option value="vespertinoBarista">Barista (Vespertino 17:00 - 22:30)</option>
+                                <option value="vespertinoCocina">Cocina (Vespertino 17:00 - 22:30)</option>
+                                <option value="auxAdministrativo">Aux. Administrativo (14:30 - 17:00)</option>
+                                <option value="apoyoCocina">Coci (14:30 - 17:00)</option>
+                                <option value="apoyoMkt">Apoyo MKT (14:30 - 17:00)</option>
+                                <option value="apoyoGeneral">Apoyo General (12:00 - 22:30)</option>
+                            </select>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 200px; gap: 20px; align-items: start;">
+                            <div>
+                                <div class="form-group" style="margin-bottom: 12px;">
+                                    <label for="granMisionDescInput" style="font-weight: 700; font-size: 0.85rem;">Descripción de La Gran Misión:</label>
+                                    <textarea id="granMisionDescInput" class="form-control" rows="5" style="width: 100%; padding: 10px; font-size: 0.9rem; line-height: 1.4; resize: vertical;" placeholder="Describe la misión, propósito y responsabilidades principales de este rol..."></textarea>
+                                </div>
+                            </div>
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; background: rgba(0,0,0,0.03); padding: 12px; border-radius: 10px; border: 1px dashed rgba(0,0,0,0.15);">
+                                <span style="font-size: 0.8rem; font-weight: 700; color: #444;">Imagen del Rol</span>
+                                <img id="granMisionImgPreview" src="kru_welcome.png?v=2" alt="Vista previa del rol" style="max-width: 140px; max-height: 140px; object-fit: contain; border-radius: 8px; border: 1px solid #ddd; background: white;">
+                                <label for="granMisionImgInput" style="cursor: pointer; background: #1976d2; color: white; padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; text-align: center; width: 100%;" title="Subir nueva imagen">
+                                    📷 Cambiar Foto
+                                </label>
+                                <input type="file" id="granMisionImgInput" accept="image/*" style="display: none;" onchange="handleRoleMissionPhotoUpload(event)">
+                                <button type="button" onclick="restoreDefaultRolePhoto()" style="background: none; border: none; font-size: 0.75rem; color: #888; text-decoration: underline; cursor: pointer;">Restaurar original</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CONFIGURACIÓN DE BANNERS DEL SISTEMA -->
+                    <div class="card glass" style="margin-top: 25px; padding: 20px; border-radius: 12px; background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(255, 255, 255, 0.5);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
+                            <h3 style="color: #9c27b0; margin: 0; display: flex; align-items: center; gap: 8px;">
+                                <span>🖼️</span> Banners e Imágenes del Sistema
+                            </h3>
+                            <button type="button" class="btn-primary" onclick="saveSystemBanners()" style="padding: 8px 18px; font-size: 0.85rem; background: linear-gradient(135deg, #9C27B0, #E91E63); border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer;">
+                                Guardar Banners 💾
+                            </button>
+                        </div>
+                        <p style="font-size: 0.85rem; color: #555; margin-bottom: 20px;">
+                            Modifica las imágenes emergentes que KRU muestra a los colaboradores durante su jornada (bienvenida, puntualidad, retardo y despedida).
+                        </p>
+
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <!-- Banner Bienvenida -->
+                            <div style="background: white; border: 1px solid #e0e0e0; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                                <strong style="font-size: 0.85rem; color: #1976d2;">🚀 Bienvenida</strong>
+                                <span style="font-size: 0.72rem; color: #777; text-align: center;">Al ingresar a la app</span>
+                                <img id="bannerPrev_welcome" src="kru_welcome.png?v=2" alt="Bienvenida" style="height: 120px; max-width: 100%; object-fit: contain; border-radius: 6px;">
+                                <label for="bannerFile_welcome" style="cursor: pointer; background: #e3f2fd; color: #1565c0; padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; width: 100%; text-align: center;">
+                                    📷 Cambiar
+                                </label>
+                                <input type="file" id="bannerFile_welcome" accept="image/*" style="display: none;" onchange="handleBannerFileSelect(event, 'welcome')">
+                                <button type="button" onclick="restoreBannerDefault('welcome')" style="background: none; border: none; font-size: 0.7rem; color: #999; text-decoration: underline; cursor: pointer;">Original</button>
+                            </div>
+
+                            <!-- Banner Llegada Puntual -->
+                            <div style="background: white; border: 1px solid #e0e0e0; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                                <strong style="font-size: 0.85rem; color: #2e7d32;">🟢 Llegada Puntual</strong>
+                                <span style="font-size: 0.72rem; color: #777; text-align: center;">Entrada a tiempo</span>
+                                <img id="bannerPrev_punctual" src="kru_punctual.png" alt="Llegada Puntual" style="height: 120px; max-width: 100%; object-fit: contain; border-radius: 6px;">
+                                <label for="bannerFile_punctual" style="cursor: pointer; background: #e8f5e9; color: #2e7d32; padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; width: 100%; text-align: center;">
+                                    📷 Cambiar
+                                </label>
+                                <input type="file" id="bannerFile_punctual" accept="image/*" style="display: none;" onchange="handleBannerFileSelect(event, 'punctual')">
+                                <button type="button" onclick="restoreBannerDefault('punctual')" style="background: none; border: none; font-size: 0.7rem; color: #999; text-decoration: underline; cursor: pointer;">Original</button>
+                            </div>
+
+                            <!-- Banner Llegada Tarde -->
+                            <div style="background: white; border: 1px solid #e0e0e0; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                                <strong style="font-size: 0.85rem; color: #e65100;">⏳ Llegada Tarde</strong>
+                                <span style="font-size: 0.72rem; color: #777; text-align: center;">Entrada con retardo</span>
+                                <img id="bannerPrev_late" src="kru_late.png" alt="Llegada Tarde" style="height: 120px; max-width: 100%; object-fit: contain; border-radius: 6px;">
+                                <label for="bannerFile_late" style="cursor: pointer; background: #fff3e0; color: #e65100; padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; width: 100%; text-align: center;">
+                                    📷 Cambiar
+                                </label>
+                                <input type="file" id="bannerFile_late" accept="image/*" style="display: none;" onchange="handleBannerFileSelect(event, 'late')">
+                                <button type="button" onclick="restoreBannerDefault('late')" style="background: none; border: none; font-size: 0.7rem; color: #999; text-decoration: underline; cursor: pointer;">Original</button>
+                            </div>
+
+                            <!-- Banner Despedida -->
+                            <div style="background: white; border: 1px solid #e0e0e0; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                                <strong style="font-size: 0.85rem; color: #512da8;">🌙 Despedida</strong>
+                                <span style="font-size: 0.72rem; color: #777; text-align: center;">Al checar salida</span>
+                                <img id="bannerPrev_checkout" src="kru_checkout.png" alt="Despedida" style="height: 120px; max-width: 100%; object-fit: contain; border-radius: 6px;">
+                                <label for="bannerFile_checkout" style="cursor: pointer; background: #ede7f6; color: #512da8; padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; width: 100%; text-align: center;">
+                                    📷 Cambiar
+                                </label>
+                                <input type="file" id="bannerFile_checkout" accept="image/*" style="display: none;" onchange="handleBannerFileSelect(event, 'checkout')">
+                                <button type="button" onclick="restoreBannerDefault('checkout')" style="background: none; border: none; font-size: 0.7rem; color: #999; text-decoration: underline; cursor: pointer;">Original</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- ADMIN TAB CONTENT: TAREAS CSV -->
@@ -528,20 +652,7 @@
                     </div>
                 </div>
 
-                <!-- ADMIN TAB CONTENT: MURO DE AVISOS ADMIN -->
-                <div class="tab-content admin-content" id="adminContentMuroAvisosAdmin">
-                    <h3>Muro de Avisos del Turno 💬</h3>
-                    <p class="subtitle">Avisos importantes de la operación en tiempo real</p>
-                    <div class="muro-container" style="display: flex; flex-direction: column; gap: 15px; background: rgba(255, 255, 255, 0.4); padding: 15px; border-radius: var(--border-radius-medium); border: 1px solid rgba(255,255,255,0.3); margin-top: 15px;">
-                        <div class="muro-messages-list" id="adminMuroMessagesList" style="max-height: 350px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px;">
-                            <!-- Messages dynamically loaded -->
-                        </div>
-                        <form id="adminMuroMessageForm" onsubmit="sendAdminMuroMessage(event)" style="display: flex; gap: 10px; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 10px; margin: 0;">
-                            <input type="text" id="adminMuroMessageInput" class="form-control" placeholder="Escribe una nota para el turno..." required style="flex-grow: 1;">
-                            <button type="submit" class="btn-primary" style="padding: 10px 20px; font-size: 0.95rem;">Enviar 🚀</button>
-                        </form>
-                    </div>
-                </div>
+
             </div>
         </section>
     </div>
@@ -623,9 +734,6 @@
                         <option value="Apoyo General">Apoyo General</option>
                         <option value="Apoyo MKT">Apoyo MKT</option>
                         
-                        <!-- Colaborativo -->
-                        <option value="Colaborativa">Colaborativa (Ambos/Todos)</option>
-                        
                         <!-- Roles de Compatibilidad -->
                         <option value="Cajera">Cajera</option>
                         <option value="Apoyo">Apoyo</option>
@@ -683,6 +791,27 @@
         </div>
     </div>
 
+    <!-- Gran Misión Balloon / Modal -->
+    <div id="granMisionModal" class="modal hidden" onclick="closeGranMisionModal()" style="z-index: 20000; align-items: center; justify-content: center; background: rgba(0,0,0,0.75); cursor: pointer; padding: 15px;">
+        <div class="modal-content glass" onclick="event.stopPropagation();" style="max-width: 440px; width: 100%; border-radius: 24px; padding: 25px; position: relative; background: #ffffff; box-shadow: 0 20px 50px rgba(0,0,0,0.3); text-align: center; border: 2px solid #ffb300; animation: modalIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+            <button class="btn-close" onclick="closeGranMisionModal()" style="position: absolute; top: 15px; right: 15px; background: #f5f5f5; border: none; font-size: 1.2rem; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; color: #555;">×</button>
+            <div style="font-size: 2.2rem; margin-bottom: 4px;">🌟</div>
+            <h2 id="granMisionTitle" style="margin: 0 0 6px 0; font-size: 1.35rem; color: #d84315; font-weight: 800;">La GRAN MISIÓN</h2>
+            <div id="granMisionRoleBadge" style="display: inline-block; padding: 4px 14px; background: #fff3e0; color: #e65100; border-radius: 14px; font-weight: 700; font-size: 0.85rem; margin-bottom: 15px; border: 1px solid #ffe0b2;">
+                Rol Actual
+            </div>
+            <div style="margin-bottom: 15px; display: flex; justify-content: center;">
+                <img id="granMisionImg" src="kru_welcome.png?v=2" alt="Misión del Rol" style="max-width: 100%; max-height: 180px; object-fit: contain; border-radius: 12px; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));">
+            </div>
+            <div id="granMisionText" style="font-size: 0.95rem; line-height: 1.5; color: #333; background: #fffde7; border: 1px solid #fff59d; padding: 15px; border-radius: 14px; margin-bottom: 20px; text-align: left; white-space: pre-line; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); font-weight: 500;">
+                Descripción de la misión del rol...
+            </div>
+            <button class="btn-primary" onclick="closeGranMisionModal()" style="width: 100%; padding: 12px; font-size: 1rem; font-weight: 800; background: linear-gradient(135deg, #FFB300, #FB8C00); border: none; border-radius: 25px; color: white; cursor: pointer; box-shadow: 0 4px 15px rgba(251, 140, 0, 0.4); text-transform: uppercase; letter-spacing: 0.5px;">
+                ¡A Conquistar el Turno! 🚀
+            </button>
+        </div>
+    </div>
+
     <!-- KRU Banner Popup Modal -->
     <div id="kruWelcomeModal" class="modal hidden" onclick="dismissKruWelcomeModal()" style="z-index: 20000; align-items: center; justify-content: center; background: rgba(0,0,0,0.85); cursor: pointer; padding: 15px;">
         <div class="modal-content glass" onclick="event.stopPropagation(); dismissKruWelcomeModal();" style="max-width: 380px; width: 100%; text-align: center; background: transparent; border: none; box-shadow: none; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0;">
@@ -699,7 +828,7 @@
     <!-- Supabase SDK (loaded locally to prevent CDN/blockage issues) -->
     <script src="supabase.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.0.55"></script>
+    <script src="app.js?v=1.0.56"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
