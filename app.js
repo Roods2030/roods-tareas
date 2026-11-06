@@ -1860,6 +1860,7 @@ function switchTaskTab(tabId) {
 // --- EMPLOYEE MESSAGING LOGIC (Two-Way with KRU) ---
 let hasShownGlobalAnnounce = false;
 let tempEmpPhotoBase64 = null;
+let isSendingEmpMessage = false;
 
 function isMessageForUserConversation(m, user) {
     if (!m || !user) return false;
@@ -1873,11 +1874,72 @@ function isMessageForUserConversation(m, user) {
     return false;
 }
 
+// Airtight deduplication helper for messages across local and server instances
+function deduplicateMessagesList(msgs) {
+    if (!Array.isArray(msgs) || msgs.length === 0) return [];
+
+    const sorted = [...msgs].sort((a, b) => {
+        const tA = new Date(a.created_at || a.timestamp || 0).getTime();
+        const tB = new Date(b.created_at || b.timestamp || 0).getTime();
+        return tA - tB;
+    });
+
+    const unique = [];
+    for (const msg of sorted) {
+        if (!msg) continue;
+        const msgTime = new Date(msg.created_at || msg.timestamp || 0).getTime();
+        const msgText = String(msg.message || '').trim();
+        const msgSender = String(msg.sender_name || '').trim();
+        const msgRecip = Number(msg.recipient_id || 0);
+        const msgPhoto = msg.photo_url ? String(msg.photo_url).slice(0, 100) : '';
+
+        const duplicateIndex = unique.findIndex(existing => {
+            // Direct ID match
+            if (msg.id && existing.id && String(msg.id) === String(existing.id)) {
+                return true;
+            }
+            const exTime = new Date(existing.created_at || existing.timestamp || 0).getTime();
+            const exText = String(existing.message || '').trim();
+            const exSender = String(existing.sender_name || '').trim();
+            const exRecip = Number(existing.recipient_id || 0);
+            const exPhoto = existing.photo_url ? String(existing.photo_url).slice(0, 100) : '';
+
+            const isSameText = msgText === exText;
+            const isSamePhoto = msgPhoto === exPhoto;
+            const isSameRecip = msgRecip === exRecip;
+
+            const isSameSender = (msgSender === exSender) || 
+                                (msgSender.includes('KRU') && exSender.includes('KRU')) ||
+                                (msgSender.includes('#') && exSender.includes('#') && msgSender.split('#')[1] === exSender.split('#')[1]);
+
+            // Within 45 second time window
+            const isWithinTime = Math.abs(msgTime - exTime) <= 45000;
+
+            return isSameText && isSamePhoto && isSameRecip && isSameSender && isWithinTime;
+        });
+
+        if (duplicateIndex === -1) {
+            unique.push(msg);
+        } else {
+            // If incoming message has a confirmed server ID (< 1000000000) and existing has a client temp ID (>= 100000000000), prefer server record
+            const existing = unique[duplicateIndex];
+            const msgIsServer = msg.id && Number(msg.id) < 100000000000;
+            const exIsServer = existing.id && Number(existing.id) < 100000000000;
+            if (msgIsServer && !exIsServer) {
+                unique[duplicateIndex] = msg;
+            }
+        }
+    }
+    return unique;
+}
+
 async function pollEmployeeMessages() {
     if (!currentUser) return;
     
-    // Check local messages first for instant rendering
-    let localMessages = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
+    // Check and deduplicate local messages first for instant rendering
+    let localMessages = deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
+    localStorage.setItem('roods_private_messages', JSON.stringify(localMessages));
+
     if (!currentUser.is_admin) {
         let myLocal = localMessages.filter(m => isMessageForUserConversation(m, currentUser));
         if (myLocal.length > 0) {
@@ -1916,7 +1978,7 @@ async function pollEmployeeMessages() {
         }
     }
     
-    // 2. Check Private Messages from Supabase
+    // 2. Check Private Messages from Supabase with Content-Aware Merging
     if (supabaseClient) {
         try {
             const { data, error } = await supabaseClient
@@ -1925,13 +1987,42 @@ async function pollEmployeeMessages() {
                 .order('created_at', { ascending: true });
                 
             if (!error && data) {
-                const map = new Map();
-                data.forEach(m => map.set(String(m.id || m.created_at), m));
-                localMessages.forEach(m => {
-                    const key = String(m.id || m.created_at);
-                    if (!map.has(key)) map.set(key, m);
+                // Authoritative cloud messages
+                const combined = [...data];
+
+                // Check local messages: only preserve those NOT already in the cloud
+                localMessages.forEach(loc => {
+                    const locTime = new Date(loc.created_at || loc.timestamp || 0).getTime();
+                    const locText = String(loc.message || '').trim();
+                    const locSender = String(loc.sender_name || '').trim();
+                    const locRecip = Number(loc.recipient_id || 0);
+
+                    const existsInCloud = data.some(srv => {
+                        if (loc.id && srv.id && String(loc.id) === String(srv.id)) return true;
+                        const srvTime = new Date(srv.created_at || srv.timestamp || 0).getTime();
+                        const srvText = String(srv.message || '').trim();
+                        const srvRecip = Number(srv.recipient_id || 0);
+                        const srvSender = String(srv.sender_name || '').trim();
+
+                        const sameSender = (locSender === srvSender) ||
+                                          (locSender.includes('KRU') && srvSender.includes('KRU')) ||
+                                          (locSender.includes('#') && srvSender.includes('#') && locSender.split('#')[1] === srvSender.split('#')[1]);
+                        const sameText = locText === srvText;
+                        const sameRecip = locRecip === srvRecip;
+                        const withinWindow = Math.abs(locTime - srvTime) <= 45000;
+
+                        return sameText && sameRecip && sameSender && withinWindow;
+                    });
+
+                    if (!existsInCloud) {
+                        // Keep unsynced offline message if recent (< 7 days)
+                        if (Date.now() - locTime < 7 * 24 * 60 * 60 * 1000) {
+                            combined.push(loc);
+                        }
+                    }
                 });
-                const allMerged = Array.from(map.values()).sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+
+                const allMerged = deduplicateMessagesList(combined);
                 localStorage.setItem('roods_private_messages', JSON.stringify(allMerged));
 
                 if (!currentUser.is_admin) {
@@ -2010,8 +2101,10 @@ function clearEmpPhotoPreview() {
 }
 
 async function sendEmployeeMessageToKru(event) {
-    event.preventDefault();
+    if (event) event.preventDefault();
+    if (isSendingEmpMessage) return;
     if (!currentUser) return;
+
     const input = document.getElementById('employeeMessageInput');
     const text = input ? input.value.trim() : '';
 
@@ -2020,47 +2113,66 @@ async function sendEmployeeMessageToKru(event) {
         return;
     }
 
-    const adminEmp = employees.find(e => e.is_admin) || { id: 99 };
-    const senderLabel = `${currentUser.nickname || currentUser.name} (#${currentUser.id})`;
-    const nowIso = new Date().toISOString();
+    const submitBtn = document.querySelector('#employeeReplyForm button[type="submit"]');
+    isSendingEmpMessage = true;
+    if (submitBtn) submitBtn.disabled = true;
 
-    const newMsg = {
-        id: Date.now(),
-        sender_name: senderLabel,
-        sender_employee_id: Number(currentUser.id),
-        recipient_id: Number(adminEmp.id),
-        message: text || (tempEmpPhotoBase64 ? '📷 [Foto adjunta]' : ''),
-        photo_url: tempEmpPhotoBase64 || null,
-        read: false,
-        created_at: nowIso
-    };
+    try {
+        const adminEmp = employees.find(e => e.is_admin) || { id: 99 };
+        const senderLabel = `${currentUser.nickname || currentUser.name} (#${currentUser.id})`;
+        const nowIso = new Date().toISOString();
 
-    let localMsgs = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
-    localMsgs.push(newMsg);
-    localStorage.setItem('roods_private_messages', JSON.stringify(localMsgs));
+        const newMsg = {
+            id: Date.now(),
+            sender_name: senderLabel,
+            sender_employee_id: Number(currentUser.id),
+            recipient_id: Number(adminEmp.id),
+            message: text || (tempEmpPhotoBase64 ? '📷 [Foto adjunta]' : ''),
+            photo_url: tempEmpPhotoBase64 || null,
+            read: false,
+            created_at: nowIso
+        };
 
-    if (input) input.value = '';
-    clearEmpPhotoPreview();
-    showNotification("🚀 Mensaje enviado a KRU exitosamente.");
+        let localMsgs = deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
+        localMsgs.push(newMsg);
+        localStorage.setItem('roods_private_messages', JSON.stringify(deduplicateMessagesList(localMsgs)));
 
-    // Update conversation view immediately
-    const myConversation = localMsgs.filter(m => isMessageForUserConversation(m, currentUser));
-    renderPrivateMessages(myConversation);
+        if (input) input.value = '';
+        clearEmpPhotoPreview();
+        showNotification("🚀 Mensaje enviado a KRU exitosamente.");
 
-    if (supabaseClient) {
-        try {
-            const dbPayload = {
-                sender_name: senderLabel,
-                recipient_id: Number(adminEmp.id),
-                message: newMsg.message,
-                photo_url: newMsg.photo_url,
-                read: false
-            };
-            const { error } = await supabaseClient.from('roods_private_messages').insert(dbPayload);
-            if (error) console.warn("Supabase insert error (saved locally):", error);
-        } catch(e) {
-            console.error("Error pushing message to cloud:", e);
+        // Update conversation view immediately
+        const myConversation = localMsgs.filter(m => isMessageForUserConversation(m, currentUser));
+        renderPrivateMessages(myConversation);
+
+        if (supabaseClient) {
+            try {
+                const dbPayload = {
+                    sender_name: senderLabel,
+                    recipient_id: Number(adminEmp.id),
+                    message: newMsg.message,
+                    photo_url: newMsg.photo_url,
+                    read: false
+                };
+                const { data: inserted, error } = await supabaseClient.from('roods_private_messages').insert(dbPayload).select();
+                if (!error && inserted && inserted.length > 0) {
+                    const serverRecord = inserted[0];
+                    let cur = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
+                    const idx = cur.findIndex(m => m.id === newMsg.id);
+                    if (idx !== -1) {
+                        cur[idx] = serverRecord;
+                        localStorage.setItem('roods_private_messages', JSON.stringify(deduplicateMessagesList(cur)));
+                    }
+                } else if (error) {
+                    console.warn("Supabase insert error (saved locally):", error);
+                }
+            } catch(e) {
+                console.error("Error pushing message to cloud:", e);
+            }
         }
+    } finally {
+        isSendingEmpMessage = false;
+        if (submitBtn) submitBtn.disabled = false;
     }
 }
 
@@ -2073,13 +2185,14 @@ function renderPrivateMessages(messages) {
     const list = document.getElementById('myMessagesList');
     if (!list) return;
     
-    if (messages.length === 0) {
+    const cleanMessages = deduplicateMessagesList(messages);
+    if (cleanMessages.length === 0) {
         list.innerHTML = '<div class="empty-state">No tienes mensajes nuevos. ¡Escríbele a KRU ante cualquier duda o novedad del turno!</div>';
         return;
     }
     
     // Sort chronologically (oldest at top, newest at bottom)
-    const sorted = [...messages].sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+    const sorted = [...cleanMessages].sort((a,b) => new Date(a.created_at || a.timestamp || 0) - new Date(b.created_at || b.timestamp || 0));
     
     let html = '';
     sorted.forEach(m => {
@@ -2131,7 +2244,7 @@ async function markPrivateMessagesAsRead() {
     if (badge) badge.classList.add('hidden');
     
     // Mark locally
-    let localMessages = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
+    let localMessages = deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
     let modified = false;
     localMessages.forEach(m => {
         if (Number(m.recipient_id) === Number(currentUser.id) && !m.read) {
@@ -2848,7 +2961,8 @@ function renderAdminSelectedChat() {
     const emp = employees.find(e => Number(e.id) === recipientId);
     const empName = emp ? (emp.nickname || emp.name) : `Colaborador #${recipientId}`;
 
-    const localMsgs = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
+    const rawMsgs = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
+    const localMsgs = deduplicateMessagesList(rawMsgs);
     // Filter messages between KRU/Admin and this specific employee
     const conversation = localMsgs.filter(m => {
         // Sent to this employee by Admin / KRU
@@ -2860,19 +2974,15 @@ function renderAdminSelectedChat() {
         return false;
     });
 
-    conversation.sort((a, b) => {
-        const tA = new Date(a.created_at || a.timestamp || 0).getTime();
-        const tB = new Date(b.created_at || b.timestamp || 0).getTime();
-        return tA - tB;
-    });
+    const cleanConversation = deduplicateMessagesList(conversation);
 
-    if (conversation.length === 0) {
+    if (cleanConversation.length === 0) {
         container.innerHTML = `<span style="color: #888;">Aún no hay mensajes intercambiados con ${empName}.</span>`;
         return;
     }
 
     let html = '';
-    conversation.forEach(m => {
+    cleanConversation.forEach(m => {
         const isFromKru = (m.sender_name === 'KRU' || m.sender_name === 'KRU (Gerencia Virtual)' || (!m.sender_name.includes(`#${recipientId}`) && Number(m.recipient_id) === recipientId && (!m.sender_employee_id || Number(m.sender_employee_id) !== recipientId)));
         const senderLabel = isFromKru ? 'KRU 🤖' : empName;
         const align = isFromKru ? 'flex-end' : 'flex-start';
@@ -2978,8 +3088,12 @@ async function sendGlobalAnnouncement(event) {
     }
 }
 
+let isSendingAdminMessage = false;
+
 async function sendPrivateMessage(event) {
-    event.preventDefault();
+    if (event) event.preventDefault();
+    if (isSendingAdminMessage) return;
+
     const recipientSelect = document.getElementById('privateMessageRecipient');
     const textInput = document.getElementById('privateMessageText');
     if (!recipientSelect || !textInput) return;
@@ -2998,52 +3112,70 @@ async function sendPrivateMessage(event) {
         return;
     }
 
-    const numRecipientId = parseInt(recipientId, 10);
-    const sender = "KRU";
-    const nowIso = new Date().toISOString();
-    
-    const obj = {
-        id: Date.now(),
-        sender_name: sender,
-        recipient_id: numRecipientId,
-        message: text || (photo ? '📷 [Foto adjunta]' : ''),
-        photo_url: photo,
-        read: false,
-        created_at: nowIso
-    };
-    
-    // Save to local storage for immediate persistence
-    let localMsgs = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
-    localMsgs.push(obj);
-    localStorage.setItem('roods_private_messages', JSON.stringify(localMsgs));
-    
-    showNotification("✉️ Mensaje enviado como KRU exitosamente.");
-    textInput.value = "";
-    clearAdminPhotoPreview();
-    renderAdminSelectedChat();
+    const submitBtn = document.querySelector('#privateMessageForm button[type="submit"]');
+    isSendingAdminMessage = true;
+    if (submitBtn) submitBtn.disabled = true;
 
-    if (supabaseClient) {
-        try {
-            const dbPayload = {
-                sender_name: sender,
-                recipient_id: numRecipientId,
-                message: obj.message,
-                photo_url: photo,
-                read: false
-            };
-            const { error } = await supabaseClient.from('roods_private_messages').insert(dbPayload);
-            if (error) {
-                // If photo_url column is missing in DB schema, retry without it
-                if (String(error.message || '').includes('photo_url')) {
-                    delete dbPayload.photo_url;
-                    await supabaseClient.from('roods_private_messages').insert(dbPayload);
-                } else {
-                    throw error;
+    try {
+        const numRecipientId = parseInt(recipientId, 10);
+        const sender = "KRU";
+        const nowIso = new Date().toISOString();
+        
+        const obj = {
+            id: Date.now(),
+            sender_name: sender,
+            recipient_id: numRecipientId,
+            message: text || (photo ? '📷 [Foto adjunta]' : ''),
+            photo_url: photo,
+            read: false,
+            created_at: nowIso
+        };
+        
+        // Save to local storage for immediate persistence
+        let localMsgs = deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
+        localMsgs.push(obj);
+        localStorage.setItem('roods_private_messages', JSON.stringify(deduplicateMessagesList(localMsgs)));
+        
+        showNotification("✉️ Mensaje enviado como KRU exitosamente.");
+        textInput.value = "";
+        clearAdminPhotoPreview();
+        renderAdminSelectedChat();
+
+        if (supabaseClient) {
+            try {
+                const dbPayload = {
+                    sender_name: sender,
+                    recipient_id: numRecipientId,
+                    message: obj.message,
+                    photo_url: photo,
+                    read: false
+                };
+                let { data: inserted, error } = await supabaseClient.from('roods_private_messages').insert(dbPayload).select();
+                if (error) {
+                    // If photo_url column is missing in DB schema, retry without it
+                    if (String(error.message || '').includes('photo_url')) {
+                        delete dbPayload.photo_url;
+                        const retryRes = await supabaseClient.from('roods_private_messages').insert(dbPayload).select();
+                        inserted = retryRes.data;
+                        error = retryRes.error;
+                    }
                 }
+                if (!error && inserted && inserted.length > 0) {
+                    const serverRecord = inserted[0];
+                    let cur = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
+                    const idx = cur.findIndex(m => m.id === obj.id);
+                    if (idx !== -1) {
+                        cur[idx] = serverRecord;
+                        localStorage.setItem('roods_private_messages', JSON.stringify(deduplicateMessagesList(cur)));
+                    }
+                }
+            } catch(e) {
+                console.error("Supabase insert error (saved locally):", e);
             }
-        } catch(e) {
-            console.error("Supabase insert error (saved locally):", e);
         }
+    } finally {
+        isSendingAdminMessage = false;
+        if (submitBtn) submitBtn.disabled = false;
     }
 }
 
