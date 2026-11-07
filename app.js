@@ -86,6 +86,9 @@ let currentUser = null; // Currently logged in user
 let currentAdminTab = "monitoreo";
 let currentTaskTab = "mis-tareas";
 let expandedTaskIds = new Set();
+let expandedMonitorSubtasks = new Set();
+let deletedDailyTaskIds = new Set(JSON.parse(localStorage.getItem('roods_deleted_daily_tasks') || '[]'));
+let lastNotifiedAdminMsgId = null;
 
 // --- Default Gran Misión Definitions per Role ---
 const DEFAULT_ROLE_MISSIONS = {
@@ -509,15 +512,16 @@ async function syncFromCloud() {
             });
 
             // Retain any unsynced local tasks (e.g. newly added manual/quick tasks for today or tomorrow)
+            // Never re-add tasks that were explicitly deleted by the user!
             const dbIds = new Set(dbDaily.map(d => String(d.id)));
             localMap.forEach((localTask, id) => {
-                if (!dbIds.has(String(id)) && localTask.date && localTask.date >= cutoffStr) {
+                if (!dbIds.has(String(id)) && localTask.date && localTask.date >= cutoffStr && !deletedDailyTaskIds.has(String(id))) {
                     mergedDaily.push(localTask);
                     mergedToPush.push(localTask);
                 }
             });
 
-            dailyTasks = mergedDaily;
+            dailyTasks = mergedDaily.filter(t => !deletedDailyTaskIds.has(String(t.id)));
             localStorage.setItem('roods_daily_tasks', JSON.stringify(dailyTasks));
 
             if (mergedToPush.length > 0) {
@@ -1336,7 +1340,7 @@ function generateDailyTasks(dateStr, schedule) {
         const taskKey = t.Tarea + '|' + targetRole;
         const deterministicId = `task_${dateStr}_${sanitize(targetRole)}_${sanitize(t.Tarea)}`;
 
-        if (!existingIds.has(deterministicId) && !existingTaskKeys.has(taskKey)) {
+        if (!existingIds.has(deterministicId) && !existingTaskKeys.has(taskKey) && !deletedDailyTaskIds.has(deterministicId)) {
             existingIds.add(deterministicId);
             existingTaskKeys.add(taskKey);
             let subtasksState = [];
@@ -1945,6 +1949,8 @@ async function pollEmployeeMessages() {
         if (myLocal.length > 0) {
             renderPrivateMessages(myLocal);
         }
+    } else {
+        updateAdminUnreadBadge(localMessages);
     }
 
     // 1. Check Global Announcements (excluding SYSTEM_CONFIG)
@@ -2039,6 +2045,7 @@ async function pollEmployeeMessages() {
                         }
                     }
                 } else {
+                    updateAdminUnreadBadge(allMerged);
                     renderAdminSelectedChat();
                 }
             }
@@ -2437,6 +2444,27 @@ function switchAdminTab(tabId) {
 }
 
 // --- ADMIN TAB: MONITOREO ---
+function toggleMonitorSubtasks(taskId, event) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const strId = String(taskId);
+    if (expandedMonitorSubtasks.has(strId)) {
+        expandedMonitorSubtasks.delete(strId);
+    } else {
+        expandedMonitorSubtasks.add(strId);
+    }
+    const el = document.getElementById(`subtasks-${strId}`);
+    if (el) {
+        el.style.display = expandedMonitorSubtasks.has(strId) ? 'block' : 'none';
+    }
+    const arrow = document.getElementById(`subtasks-arrow-${strId}`);
+    if (arrow) {
+        arrow.textContent = expandedMonitorSubtasks.has(strId) ? '▴' : '▾';
+    }
+}
+
 function renderAdminMonitoreo() {
     const grid = document.getElementById('monitoreoGrid');
     if (!grid) return;
@@ -2521,10 +2549,13 @@ function renderAdminMonitoreo() {
                     const hasSubtasks = t.subtasks_state && t.subtasks_state.length > 0;
                     const completedCount = hasSubtasks ? t.subtasks_state.filter(s => s.completed).length : 0;
                     const subtaskSummary = hasSubtasks ? ` <span style="font-size: 0.7rem; color: #777;">(${completedCount}/${t.subtasks_state.length})</span>` : "";
+                    const strTaskId = String(t.id);
+                    const isExpanded = hasSubtasks && expandedMonitorSubtasks.has(strTaskId);
+                    const arrowIcon = isExpanded ? '▴' : '▾';
                     
                     let subtasksHtml = "";
                     if (hasSubtasks) {
-                        subtasksHtml = `<div id="subtasks-${t.id}" style="display: none; padding-left: 20px; font-size: 0.75rem; margin-top: 4px; color: #555;">`;
+                        subtasksHtml = `<div id="subtasks-${strTaskId}" style="display: ${isExpanded ? 'block' : 'none'}; padding-left: 20px; font-size: 0.75rem; margin-top: 4px; color: #555;">`;
                         t.subtasks_state.forEach(st => {
                             const stIcon = st.completed ? "☑️" : "☐";
                             subtasksHtml += `<div style="margin-bottom: 2px;">${stIcon} ${st.name}</div>`;
@@ -2532,12 +2563,14 @@ function renderAdminMonitoreo() {
                         subtasksHtml += `</div>`;
                     }
                     
-                    const toggleAttr = hasSubtasks ? `onclick="const el = document.getElementById('subtasks-${t.id}'); el.style.display = el.style.display === 'none' ? 'block' : 'none';" style="cursor: pointer;" title="Haz clic para ver subtareas"` : "";
+                    const toggleAttr = hasSubtasks ? `onclick="toggleMonitorSubtasks('${strTaskId}', event)" style="cursor: pointer; user-select: none;" title="Haz clic para ver subtareas"` : "";
 
                     tasksDetailsHtml += `
                         <div style="margin-bottom: 6px;">
                             <div style="color: ${color}; display: flex; justify-content: space-between; align-items: center; text-decoration: ${textDecoration};" ${toggleAttr}>
-                                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; display: flex; align-items: center; gap: 4px;">${statusIcon} ${t.task_name}${subtaskSummary} ${hasSubtasks ? '▾' : ''}</span>
+                                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px; display: flex; align-items: center; gap: 4px;">
+                                    ${statusIcon} ${t.task_name}${subtaskSummary} ${hasSubtasks ? `<span id="subtasks-arrow-${strTaskId}" style="font-size: 0.85rem; font-weight: bold;">${arrowIcon}</span>` : ''}
+                                </span>
                                 <div style="display: flex; align-items: center; text-decoration: none;" onclick="event.stopPropagation()">
                                     <span style="font-weight: 600; flex-shrink: 0;">${timeText}</span>
                                     ${deleteBtnHtml}
@@ -2947,6 +2980,67 @@ function clearAdminPhotoPreview() {
     if (container) container.style.display = 'none';
 }
 
+function updateAdminUnreadBadge(allMessages) {
+    if (!currentUser || !currentUser.is_admin) return;
+    const msgs = allMessages || deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
+    
+    // Unread messages sent by collaborators to KRU
+    const unreadMsgs = msgs.filter(m => {
+        const isFromKru = (m.sender_name === 'KRU' || m.sender_name === 'KRU (Gerencia Virtual)');
+        return !isFromKru && !m.read;
+    });
+
+    const badge = document.getElementById('adminUnreadBadge');
+    if (badge) {
+        if (unreadMsgs.length > 0) {
+            badge.textContent = unreadMsgs.length > 99 ? '99+' : unreadMsgs.length;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+
+    // Trigger visual notification and haptic feedback if a new unread message arrived
+    if (unreadMsgs.length > 0) {
+        const newest = unreadMsgs[unreadMsgs.length - 1];
+        const newestId = String(newest.id || newest.created_at);
+        if (lastNotifiedAdminMsgId && lastNotifiedAdminMsgId !== newestId) {
+            showNotification(`🔔 Nuevo mensaje de ${newest.sender_name}: "${newest.message || '📷 Foto adjunta'}"`, 10000);
+            try {
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+            } catch(e) {}
+        }
+        lastNotifiedAdminMsgId = newestId;
+    }
+}
+
+async function markAdminChatAsRead(recipientId) {
+    if (!currentUser || !currentUser.is_admin || !recipientId) return;
+    let localMessages = deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
+    let modified = false;
+    localMessages.forEach(m => {
+        const isFromEmp = (m.sender_employee_id && Number(m.sender_employee_id) === Number(recipientId)) ||
+                          (m.sender_name && m.sender_name.includes(`#${recipientId}`));
+        if (isFromEmp && !m.read) {
+            m.read = true;
+            modified = true;
+        }
+    });
+    if (modified) {
+        localStorage.setItem('roods_private_messages', JSON.stringify(localMessages));
+        updateAdminUnreadBadge(localMessages);
+    }
+    if (supabaseClient) {
+        try {
+            await supabaseClient
+                .from('roods_private_messages')
+                .update({ read: true })
+                .eq('read', false)
+                .ilike('sender_name', `%#${recipientId}%`);
+        } catch(e) {}
+    }
+}
+
 function renderAdminSelectedChat() {
     const container = document.getElementById('adminChatMessagesList');
     const select = document.getElementById('privateMessageRecipient');
@@ -2957,6 +3051,9 @@ function renderAdminSelectedChat() {
         container.innerHTML = '<span style="color: #888;">Selecciona un colaborador para ver la conversación.</span>';
         return;
     }
+
+    // Mark messages from this selected collaborator as read
+    markAdminChatAsRead(recipientId);
 
     const emp = employees.find(e => Number(e.id) === recipientId);
     const empName = emp ? (emp.nickname || emp.name) : `Colaborador #${recipientId}`;
@@ -3007,12 +3104,19 @@ function renderAdminSelectedChat() {
 
 function renderAdminComunicados() {
     const select = document.getElementById('privateMessageRecipient');
+    const localMsgs = deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
     if (select) {
         const cur = select.value;
         let html = '<option value="">-- Selecciona Colaborador --</option>';
         const nonAdmins = employees.filter(e => !e.is_admin);
         nonAdmins.forEach(emp => {
-            html += `<option value="${emp.id}">${emp.nickname || emp.name}</option>`;
+            const hasUnread = localMsgs.some(m => {
+                const isFromThisEmp = (m.sender_employee_id && Number(m.sender_employee_id) === Number(emp.id)) ||
+                                      (m.sender_name && m.sender_name.includes(`#${emp.id}`));
+                return isFromThisEmp && !m.read;
+            });
+            const unreadMarker = hasUnread ? ' 💬 (Nuevo)' : '';
+            html += `<option value="${emp.id}">${emp.nickname || emp.name}${unreadMarker}</option>`;
         });
         select.innerHTML = html;
         if (cur) {
@@ -3023,6 +3127,7 @@ function renderAdminComunicados() {
     }
     loadRecentAnnouncements();
     renderAdminSelectedChat();
+    updateAdminUnreadBadge(localMsgs);
 }
 
 async function loadRecentAnnouncements() {
@@ -3477,8 +3582,8 @@ function renderAdminCsvView() {
             <td><span style="font-size:0.85rem; color: #555;">${subsText}</span></td>
             <td>
                 <div style="display:flex; gap: 6px;">
-                    <button class="btn-small" onclick="openTaskTemplateModal(${t.id})" style="padding: 4px 8px; font-size:0.75rem;">Editar ✏️</button>
-                    <button class="btn-delete-small" onclick="deleteTaskTemplate(${t.id})" style="padding: 4px 8px; font-size:0.75rem;">Borrar 🗑️</button>
+                    <button class="btn-small" onclick="openTaskTemplateModal('${t.id}')" style="padding: 4px 8px; font-size:0.75rem;">Editar ✏️</button>
+                    <button class="btn-delete-small" onclick="deleteTaskTemplate('${t.id}')" style="padding: 4px 8px; font-size:0.75rem;">Borrar 🗑️</button>
                 </div>
             </td>
         `;
@@ -3512,7 +3617,7 @@ function openTaskTemplateModal(id = null) {
     
     if (id) {
         // Edit mode
-        const t = taskTemplates.find(item => item.id == id);
+        const t = taskTemplates.find(item => String(item.id) === String(id));
         if (!t) return;
         
         title.textContent = "Editar Tarea Base";
@@ -3558,23 +3663,29 @@ function closeTaskTemplateModal() {
 async function deleteTaskTemplate(id) {
     if (!confirm("¿Estás seguro de que deseas eliminar esta tarea base?")) return;
     
-    const index = taskTemplates.findIndex(item => item.id == id);
+    const strId = String(id);
+    const index = taskTemplates.findIndex(item => String(item.id) === strId);
     if (index === -1) return;
     
     const templateToDelete = taskTemplates[index];
     taskTemplates.splice(index, 1);
     saveLocalDatabase();
+
+    // Immediately remove today's instances of this deleted template
+    if (typeof refreshTodayDailyTasksFromTemplates === 'function') {
+        refreshTodayDailyTasksFromTemplates();
+    }
     
     // Cloud sync
     if (supabaseClient) {
         try {
-            // Delete from cloud by Tarea and Rol to match
-            const { error } = await supabaseClient
-                .from('roods_task_templates')
-                .delete()
-                .eq('Tarea', templateToDelete.Tarea)
-                .eq('Rol', templateToDelete.Rol);
-                
+            let deleteQuery = supabaseClient.from('roods_task_templates').delete();
+            if (templateToDelete.id && !isNaN(Number(templateToDelete.id))) {
+                deleteQuery = deleteQuery.eq('id', Number(templateToDelete.id));
+            } else {
+                deleteQuery = deleteQuery.eq('Tarea', templateToDelete.Tarea).eq('Rol', templateToDelete.Rol);
+            }
+            const { error } = await deleteQuery;
             if (error) throw error;
             showNotification("🗑️ Tarea base eliminada de la nube.");
         } catch (e) {
@@ -4075,7 +4186,24 @@ function deleteEmployee(empId) {
     showNotification("Empleado eliminado.");
 }
 
-// --- REAL-TIME URGENT TASKS LOGIC REMOVED ---
+// --- REAL-TIME TASKS LOGIC (DEBOUNCED TO PREVENT UI JITTER / SHAKING) ---
+let debounceRefreshEmployeeTasksTimer = null;
+function debouncedRefreshEmployeeTasksUI() {
+    clearTimeout(debounceRefreshEmployeeTasksTimer);
+    debounceRefreshEmployeeTasksTimer = setTimeout(() => {
+        refreshEmployeeTasksUI();
+    }, 250);
+}
+
+let debounceRenderAdminMonitoreoTimer = null;
+function debouncedRenderAdminMonitoreo() {
+    clearTimeout(debounceRenderAdminMonitoreoTimer);
+    debounceRenderAdminMonitoreoTimer = setTimeout(() => {
+        if (typeof currentAdminTab !== 'undefined' && currentAdminTab === 'monitoreo') {
+            renderAdminMonitoreo();
+        }
+    }, 250);
+}
 
 function refreshEmployeeTasksUI() {
     if (!currentUser || currentUser.is_admin) return;
@@ -4127,9 +4255,9 @@ function subscribeToAllDailyTasks() {
                         
                         if (currentUser) {
                             if (currentUser.is_admin) {
-                                renderAdminMonitoreo();
+                                debouncedRenderAdminMonitoreo();
                             } else {
-                                refreshEmployeeTasksUI();
+                                debouncedRefreshEmployeeTasksUI();
                             }
                         }
                     }
@@ -4146,9 +4274,9 @@ function subscribeToAllDailyTasks() {
                         
                         if (currentUser) {
                             if (currentUser.is_admin) {
-                                renderAdminMonitoreo();
+                                debouncedRenderAdminMonitoreo();
                             } else {
-                                refreshEmployeeTasksUI();
+                                debouncedRefreshEmployeeTasksUI();
                             }
                         }
                     }
@@ -4163,9 +4291,9 @@ function subscribeToAllDailyTasks() {
                         
                         if (currentUser) {
                             if (currentUser.is_admin) {
-                                renderAdminMonitoreo();
+                                debouncedRenderAdminMonitoreo();
                             } else {
-                                refreshEmployeeTasksUI();
+                                debouncedRefreshEmployeeTasksUI();
                             }
                         }
                     }
@@ -4178,8 +4306,15 @@ function subscribeToAllDailyTasks() {
 async function deleteActiveTask(taskId) {
     if (!confirm("¿Estás seguro de que deseas eliminar esta tarea activa para el día de hoy?")) return;
 
-    const idx = dailyTasks.findIndex(d => d.id === taskId);
+    const strId = String(taskId);
+    const idx = dailyTasks.findIndex(d => String(d.id) === strId);
     if (idx === -1) return;
+
+    // Remember that this task was intentionally deleted so generateDailyTasks doesn't recreate it
+    deletedDailyTaskIds.add(strId);
+    try {
+        localStorage.setItem('roods_deleted_daily_tasks', JSON.stringify(Array.from(deletedDailyTaskIds)));
+    } catch(e) {}
 
     dailyTasks.splice(idx, 1);
     saveLocalDatabase();
@@ -4534,10 +4669,10 @@ function subscribeToAttendance() {
                     
                     if (currentUser) {
                         if (currentUser.is_admin) {
-                            if (currentAdminTab === 'monitoreo') renderAdminMonitoreo();
+                            if (currentAdminTab === 'monitoreo') debouncedRenderAdminMonitoreo();
                             if (currentAdminTab === 'asistencia') renderAdminAttendance();
                         } else {
-                            initEmployeeView();
+                            debouncedRefreshEmployeeTasksUI();
                         }
                     }
                 }

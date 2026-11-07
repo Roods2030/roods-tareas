@@ -1334,3 +1334,28 @@ body {
     vertical-align: middle;
     box-shadow: 0 0 5px rgba(255, 82, 82, 0.6);
 }
+
+/* Responsive Containers for Monitoreo and Comunicados */
+.admin-monitoreo-container {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+    width: 100%;
+}
+
+.admin-comunicados-container {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+    width: 100%;
+}
+
+@media (min-width: 992px) {
+    .admin-comunicados-container {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+        gap: 25px;
+        align-items: start;
+    }
+}
+
