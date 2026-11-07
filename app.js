@@ -4123,6 +4123,719 @@ function downloadTemplateCsv() {
     URL.revokeObjectURL(url);
 }
 
+// --- PRINT WEEKLY CHECKLISTS (CONTINGENCY / OFFLINE SHEETS) ---
+const PRINT_ROLES_CONFIG = [
+    {
+        name: 'CajiBari',
+        roleKey: 'matutinoCajeroBarista',
+        aliases: ['CajiBari'],
+        title: 'CAJIBARI (CAJA Y BARRA)',
+        subtitle: 'Turno polivalente de atención en caja, bebidas frías/calientes y servicio en mostrador.',
+        greeting: '¡Hola equipo CajiBari! 💜 Cada bebida perfecta y cada peso cuadrado hacen grande a ROODS.',
+        defaultAvatar: 'kru_avatar.jpg'
+    },
+    {
+        name: 'CociBari',
+        roleKey: 'matutinoCocinaBarista',
+        aliases: ['CociBari', 'Coci'],
+        title: 'COCIBARI (COCINA Y BARRA)',
+        subtitle: 'Turno matutino de cocina, barra y preparación fresca de desayunos y repostería.',
+        greeting: '¡Hola equipo CociBari! 💜 La frescura, sazón y rapidez en cada orden enamoran a nuestros clientes.',
+        defaultAvatar: 'kru_avatar.jpg'
+    },
+    {
+        name: 'Cajero',
+        roleKey: 'vespertinoCajero',
+        aliases: ['Cajero', 'Cajera'],
+        title: 'CAJERO (TURNO VESPERTINO)',
+        subtitle: 'Atención en caja, cobro eficiente, servicio al cliente y corte final de turno.',
+        greeting: '¡Hola equipo de Caja! 💜 Tu sonrisa y amabilidad son el mejor cierre de día para quienes nos visitan.',
+        defaultAvatar: 'kru_avatar.jpg'
+    },
+    {
+        name: 'Barista',
+        roleKey: 'vespertinoBarista',
+        aliases: ['Barista'],
+        title: 'BARISTA (TURNO VESPERTINO)',
+        subtitle: 'Especialista en barra de café, bebidas frías/calientes y limpieza de estación.',
+        greeting: '¡Hola Baristas! 💜 Cada taza con la extracción perfecta es el sello de distinción ROODS.',
+        defaultAvatar: 'kru_avatar.jpg'
+    },
+    {
+        name: 'Cocina',
+        roleKey: 'vespertinoCocina',
+        aliases: ['Cocina'],
+        title: 'COCINA (TURNO VESPERTINO)',
+        subtitle: 'Preparación de alimentos, recetas maestras, control de calidad y cierre impecable.',
+        greeting: '¡Hola equipo de Cocina! 💜 La calidad y sazón en cada platillo hacen que nuestros clientes siempre vuelvan.',
+        defaultAvatar: 'kru_avatar.jpg'
+    },
+    {
+        name: 'Apoyo MKT',
+        roleKey: 'apoyoMkt',
+        aliases: ['Apoyo MKT', 'Marketing', 'MKT'],
+        title: 'APOYO MARKETING (MKT)',
+        subtitle: 'Creación de contenido, apoyo en mostrador y difusión de la experiencia ROODS.',
+        greeting: '¡Hola equipo MKT! 💜 Tu creatividad y dinamismo transmiten la vibra única de ROODS.',
+        defaultAvatar: 'kru_avatar.jpg'
+    },
+    {
+        name: 'Apoyo General',
+        roleKey: 'apoyoGeneral',
+        aliases: ['Apoyo General', 'Apoyo'],
+        title: 'APOYO GENERAL',
+        subtitle: 'Soporte operativo integral en piso, insumos, limpieza y atención continua.',
+        greeting: '¡Hola equipo de Apoyo! 💜 Su rapidez y atención al detalle mantienen la magia de toda la sucursal.',
+        defaultAvatar: 'kru_avatar.jpg'
+    }
+];
+
+function isPrintTaskActiveOnDay(diasStr, dayKey) {
+    if (!diasStr) return true;
+    const s = String(diasStr).trim().toLowerCase();
+    if (s === 'todos' || s === '' || s === 'diario' || s.includes('todos')) return true;
+    
+    if (s.includes('lunes-viernes') || s.includes('lunes a viernes')) {
+        return dayKey === 'LUN' || dayKey === 'MIÉ' || dayKey === 'JUE' || dayKey === 'VIE';
+    }
+    if (s.includes('fin de semana')) {
+        return dayKey === 'SÁB' || dayKey === 'DOM';
+    }
+
+    const mapping = {
+        'MIÉ': ['mie', 'mié', 'miercoles', 'miércoles'],
+        'JUE': ['jue', 'jueves'],
+        'VIE': ['vie', 'viernes'],
+        'SÁB': ['sab', 'sáb', 'sabado', 'sábado'],
+        'DOM': ['dom', 'domingo'],
+        'LUN': ['lun', 'lunes']
+    };
+    return (mapping[dayKey] || []).some(c => s.includes(c));
+}
+
+function openPrintChecklistModal() {
+    const modal = document.getElementById('printChecklistModal');
+    if (!modal) return;
+
+    const weekInput = document.getElementById('printWeekInput');
+    const weekBlankCheckbox = document.getElementById('printWeekBlank');
+    const fallbackBox = document.getElementById('printFallbackContainer');
+    if (fallbackBox) fallbackBox.style.display = 'none';
+
+    if (weekBlankCheckbox) weekBlankCheckbox.checked = false;
+    if (weekInput) {
+        weekInput.disabled = false;
+        const startWed = currentRoleViewWeekStart ? new Date(currentRoleViewWeekStart) : getStartOfWeekWednesday(new Date());
+        const endMon = new Date(startWed);
+        endMon.setDate(startWed.getDate() + 5);
+        weekInput.value = `${startWed.getDate()}/${MONTHS[startWed.getMonth()]} al ${endMon.getDate()}/${MONTHS[endMon.getMonth()]}`;
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closePrintChecklistModal() {
+    const modal = document.getElementById('printChecklistModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function togglePrintWeekBlank(checkbox) {
+    const weekInput = document.getElementById('printWeekInput');
+    if (!weekInput) return;
+    weekInput.disabled = checkbox.checked;
+    if (checkbox.checked) {
+        weekInput.value = '___/___ al ___/___';
+    } else {
+        const startWed = currentRoleViewWeekStart ? new Date(currentRoleViewWeekStart) : getStartOfWeekWednesday(new Date());
+        const endMon = new Date(startWed);
+        endMon.setDate(startWed.getDate() + 5);
+        weekInput.value = `${startWed.getDate()}/${MONTHS[startWed.getMonth()]} al ${endMon.getDate()}/${MONTHS[endMon.getMonth()]}`;
+    }
+}
+
+function generateAndPrintChecklists(event) {
+    if (event) event.preventDefault();
+
+    const roleSelect = document.getElementById('printRoleSelect');
+    const selectedRole = roleSelect ? roleSelect.value : 'ALL';
+    const isBlank = document.getElementById('printWeekBlank')?.checked;
+    const weekInputValue = document.getElementById('printWeekInput')?.value.trim();
+    const sucursalValue = document.getElementById('printSucursalInput')?.value.trim() || 'Sucursal ROODS';
+
+    let weekStr = "___/___ al ___/___";
+    if (!isBlank && weekInputValue) {
+        weekStr = weekInputValue;
+    }
+
+    let rolesToPrint = [];
+    if (selectedRole === 'ALL') {
+        rolesToPrint = [...PRINT_ROLES_CONFIG];
+    } else {
+        const found = PRINT_ROLES_CONFIG.find(r => r.name === selectedRole);
+        if (found) rolesToPrint = [found];
+        else rolesToPrint = [{ name: selectedRole, roleKey: '', aliases: [selectedRole], title: selectedRole.toUpperCase(), subtitle: '', greeting: `¡Hola equipo ${selectedRole}! 💜 Cada tarea cuenta para hacer grande a ROODS.`, defaultAvatar: 'kru_avatar.jpg' }];
+    }
+
+    const days = ['MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM', 'LUN'];
+    let sheetsHtml = '';
+
+    rolesToPrint.forEach(cfg => {
+        // Find tasks in taskTemplates
+        let matchedTasks = taskTemplates.filter(t => {
+            if (t.Rol === 'Aux. Administrativo' || t.Rol === 'Administrativo') return false;
+            if (typeof isRoleMatch === 'function') {
+                return isRoleMatch(t.Rol, cfg.aliases) || cfg.aliases.includes(t.Rol);
+            }
+            return cfg.aliases.includes(t.Rol);
+        });
+
+        // Sort by Orden
+        matchedTasks.sort((a, b) => {
+            const ordA = (a.Orden !== undefined && a.Orden !== null) ? Number(a.Orden) : 999;
+            const ordB = (b.Orden !== undefined && b.Orden !== null) ? Number(b.Orden) : 999;
+            return ordA - ordB;
+        });
+
+        // Custom Gran Misión override if any
+        let roleTitle = cfg.title;
+        let roleSubtitle = cfg.subtitle;
+        let roleAvatar = cfg.defaultAvatar;
+        if (typeof roleMissions !== 'undefined' && roleMissions[cfg.roleKey]) {
+            const rm = roleMissions[cfg.roleKey];
+            if (rm.title) roleTitle = rm.title.toUpperCase();
+            if (rm.description) roleSubtitle = rm.description;
+            if (rm.image) roleAvatar = rm.image;
+        }
+
+        let rowsHtml = '';
+        matchedTasks.forEach(t => {
+            const subsRaw = (t.Subtareas || '').trim();
+            const subtasks = subsRaw ? subsRaw.split(/[;\n]/).map(s => s.trim()).filter(Boolean) : [];
+            const pasosStr = subtasks.length > 0 ? ` <span style="font-weight: 500; color: #6b7280; font-size: 0.67rem;">(${subtasks.length} pasos)</span>` : '';
+
+            const turnoVal = t.Turno || 'Ambos';
+            const freqVal = t.Dias || 'Todos';
+            const isImp = String(t.Imprescindible || '').trim().toLowerCase() === 'si';
+            const impBadge = isImp ? '<span class="badge-imp">⭐Sí</span>' : '<span class="badge-no">No</span>';
+
+            let dayCells = '';
+            days.forEach(d => {
+                if (isPrintTaskActiveOnDay(freqVal, d)) {
+                    dayCells += '<td style="text-align: center;"><div class="print-box"></div></td>';
+                } else {
+                    dayCells += '<td style="text-align: center;"><span class="print-dash">—</span></td>';
+                }
+            });
+
+            rowsHtml += `
+            <tr class="tr-parent">
+                <td class="td-task-parent">📌 ${t.Tarea || ''}${pasosStr}</td>
+                <td style="text-align: center; font-size: 0.68rem; color: #4b5563;">${turnoVal}</td>
+                <td style="text-align: center; font-size: 0.68rem; color: #4b5563;">${freqVal}</td>
+                <td style="text-align: center;">${impBadge}</td>
+                ${dayCells}
+            </tr>
+            `;
+
+            subtasks.forEach(sub => {
+                rowsHtml += `
+                <tr class="tr-subtask">
+                    <td class="td-task-sub">↳ ${sub}</td>
+                    <td style="text-align: center; font-size: 0.66rem; color: #9ca3af;">${turnoVal}</td>
+                    <td style="text-align: center; font-size: 0.66rem; color: #9ca3af;">${freqVal}</td>
+                    <td style="text-align: center;">${impBadge}</td>
+                    ${dayCells}
+                </tr>
+                `;
+            });
+        });
+
+        if (matchedTasks.length === 0) {
+            rowsHtml = `
+            <tr>
+                <td colspan="10" style="text-align: center; padding: 25px; color: #888;">
+                    No se encontraron misiones registradas para el rol ${cfg.name}.
+                </td>
+            </tr>
+            `;
+        }
+
+        sheetsHtml += `
+        <div class="role-sheet">
+            <div class="banner-container">
+                <div class="banner-left">
+                    <div class="banner-avatar-wrap">
+                        <img src="${roleAvatar}" alt="Avatar" onerror="this.src='kru_avatar.jpg'">
+                    </div>
+                    <div class="banner-titles">
+                        <h1 class="banner-title">CHECK LIST SEMANAL • ${roleTitle}</h1>
+                        <div class="banner-subtitle">"Evoluciona tu Antojo" — ${roleSubtitle}</div>
+                        <div class="banner-badges">
+                            <span class="banner-badge">👤 Responsable: Colaborador(a) ${cfg.name}</span>
+                            <span class="banner-badge">📅 Semana: ${weekStr}</span>
+                            <span class="banner-badge">📍 ${sucursalValue}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="banner-bubble">
+                    ${cfg.greeting}
+                </div>
+            </div>
+
+            <div class="notice-bar">
+                <div class="notice-header">
+                    <span>🎯</span> CONTROL DE OPERACIONES Y CALIDAD SEMANAL • REGLA DE DESCANSO
+                </div>
+                <p class="notice-text">
+                    Marca con una palomita [✓] cada tarea realizada en tu turno. Las columnas corresponden a los 6 días de operación semanal (Mié a Lun). El Martes es día de descanso oficial de la sucursal. Las tareas marcadas con ⭐Sí son imprescindibles para la entrega de turno y corte.
+                </p>
+            </div>
+
+            <table class="checklist-table">
+                <thead>
+                    <tr>
+                        <th style="width: 44%; text-align: left; padding-left: 8px;">TAREA / PROCEDIMIENTO DETALLADO</th>
+                        <th style="width: 8%; text-align: center;">TURNO</th>
+                        <th style="width: 12%; text-align: center;">FRECUENCIA</th>
+                        <th style="width: 6%; text-align: center;">IMP.</th>
+                        <th style="width: 5%; text-align: center;">MIÉ</th>
+                        <th style="width: 5%; text-align: center;">JUE</th>
+                        <th style="width: 5%; text-align: center;">VIE</th>
+                        <th style="width: 5%; text-align: center;">SÁB</th>
+                        <th style="width: 5%; text-align: center;">DOM</th>
+                        <th style="width: 5%; text-align: center;">LUN</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+
+            <div class="sheet-footer">
+                <span>Checklist Semanal ROODS • Misiones por Rol</span>
+                <span>Sucursal ROODS • Sistema de Calidad Operativa</span>
+            </div>
+        </div>
+        `;
+    });
+
+    const fullDocHtml = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checklist Semanal • ROODS</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Nunito:wght@400;600;700;800&display=swap');
+
+  @page {
+    size: letter portrait;
+    margin: 6mm 8mm 6mm 8mm;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #1f2937;
+    background: #f3f4f6;
+  }
+
+  .screen-toolbar {
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #2e0854;
+    color: white;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    z-index: 10000;
+  }
+
+  .screen-toolbar h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .screen-toolbar .actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .btn-print-action {
+    background: #ffb300;
+    color: #1f2937;
+    border: none;
+    font-weight: 800;
+    font-size: 0.9rem;
+    padding: 8px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+
+  .btn-print-action:hover {
+    background: #ffa000;
+    transform: translateY(-1px);
+  }
+
+  .btn-close-action {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+
+  .sheets-container {
+    max-width: 900px;
+    margin: 20px auto;
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+    padding: 0 15px;
+  }
+
+  .role-sheet {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    padding: 14px 18px 16px 18px;
+    box-sizing: border-box;
+  }
+
+  /* HEADER BANNER */
+  .banner-container {
+    background: linear-gradient(135deg, #4A148C 0%, #6A1B9A 55%, #7B1FA2 100%);
+    border-radius: 12px;
+    padding: 12px 16px;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .banner-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-grow: 1;
+    min-width: 0;
+  }
+
+  .banner-avatar-wrap {
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    border: 3px solid #ffca28;
+    background: white;
+    overflow: hidden;
+    flex-shrink: 0;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+  }
+
+  .banner-avatar-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .banner-titles {
+    min-width: 0;
+  }
+
+  .banner-title {
+    margin: 0;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 900;
+    letter-spacing: 0.3px;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .banner-subtitle {
+    margin: 2px 0 6px 0;
+    font-size: 0.73rem;
+    color: #f3e5f5;
+    font-style: italic;
+    line-height: 1.25;
+  }
+
+  .banner-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .banner-badge {
+    background: rgba(255, 255, 255, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 16px;
+    padding: 2px 8px;
+    font-size: 0.66rem;
+    font-weight: 700;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .banner-bubble {
+    background: white;
+    color: #212121;
+    border-radius: 10px;
+    padding: 8px 12px;
+    max-width: 220px;
+    flex-shrink: 0;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.18);
+    font-size: 0.69rem;
+    line-height: 1.3;
+    font-weight: 700;
+    position: relative;
+    border: 1px solid #e0e0e0;
+  }
+
+  /* NOTICE BAR */
+  .notice-bar {
+    background: #faf5ff;
+    border: 1px solid #d1c4e9;
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin: 8px 0 10px 0;
+  }
+
+  .notice-header {
+    color: #4A148C;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 2px;
+  }
+
+  .notice-text {
+    margin: 0;
+    font-size: 0.67rem;
+    color: #424242;
+    line-height: 1.3;
+  }
+
+  /* CHECKLIST TABLE */
+  .checklist-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.69rem;
+  }
+
+  .checklist-table thead {
+    display: table-header-group;
+  }
+
+  .checklist-table thead tr {
+    background: #4A148C;
+    color: white;
+  }
+
+  .checklist-table th {
+    padding: 5px 3px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    border-right: 1px solid rgba(255,255,255,0.15);
+  }
+
+  .checklist-table th:last-child {
+    border-right: none;
+  }
+
+  .checklist-table tbody tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .tr-parent {
+    background: #f8f9fa;
+    border-top: 1px solid #d1d5db;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .tr-subtask {
+    background: #ffffff;
+    border-bottom: 1px solid #f3f4f6;
+  }
+
+  .checklist-table td {
+    padding: 3.5px 5px;
+    vertical-align: middle;
+    border-right: 1px solid #e5e7eb;
+  }
+
+  .checklist-table td:last-child {
+    border-right: none;
+  }
+
+  .td-task-parent {
+    font-weight: 700;
+    color: #111827;
+  }
+
+  .td-task-sub {
+    color: #374151;
+    padding-left: 18px !important;
+  }
+
+  .badge-imp {
+    background: #fff8e1;
+    border: 1px solid #ffca28;
+    color: #e65100;
+    font-weight: 800;
+    font-size: 0.62rem;
+    border-radius: 4px;
+    padding: 1px 3px;
+    display: inline-block;
+    white-space: nowrap;
+  }
+
+  .badge-no {
+    color: #9ca3af;
+    font-size: 0.65rem;
+  }
+
+  .print-box {
+    width: 13px;
+    height: 13px;
+    border: 1.5px solid #6A1B9A;
+    border-radius: 3px;
+    margin: 0 auto;
+    background: white;
+    display: block;
+  }
+
+  .print-dash {
+    color: #cbd5e1;
+    font-weight: 900;
+    font-size: 0.8rem;
+    display: block;
+    text-align: center;
+  }
+
+  .sheet-footer {
+    margin-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.64rem;
+    color: #9e9e9e;
+    border-top: 1px dashed #e0e0e0;
+    padding-top: 5px;
+  }
+
+  @media print {
+    body {
+      background: white !important;
+    }
+    .screen-toolbar {
+      display: none !important;
+    }
+    .sheets-container {
+      max-width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      gap: 0 !important;
+    }
+    .role-sheet {
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      padding: 0 !important;
+      margin-bottom: 0 !important;
+      page-break-after: always;
+      break-after: page;
+    }
+    .role-sheet:last-child {
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="screen-toolbar">
+    <h2>📋 Checklists Semanales de Contingencia • ROODS</h2>
+    <div class="actions">
+        <button class="btn-print-action" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+        <button class="btn-close-action" onclick="window.close()">✕ Cerrar</button>
+    </div>
+</div>
+
+<div class="sheets-container">
+    ${sheetsHtml}
+</div>
+
+</body>
+</html>`;
+
+    // Try opening new print window
+    const printWin = window.open('', '_blank');
+    if (printWin) {
+        printWin.document.open();
+        printWin.document.write(fullDocHtml);
+        printWin.document.close();
+        printWin.focus();
+        setTimeout(() => {
+            try {
+                printWin.print();
+            } catch (e) {
+                console.warn('Auto print trigger prevented:', e);
+            }
+        }, 500);
+        closePrintChecklistModal();
+    } else {
+        // Fallback for pop-up blockers
+        const fallbackBox = document.getElementById('printFallbackContainer');
+        const fallbackLink = document.getElementById('printFallbackLink');
+        if (fallbackBox && fallbackLink) {
+            const blob = new Blob([fullDocHtml], { type: 'text/html;charset=utf-8' });
+            const blobUrl = URL.createObjectURL(blob);
+            fallbackLink.href = blobUrl;
+            fallbackBox.style.display = 'block';
+        } else {
+            alert('Por favor permite ventanas emergentes (pop-ups) en tu navegador para ver la ficha de impresión.');
+        }
+    }
+}
+
 function refreshTodayDailyTasksFromTemplates() {
     const today = new Date();
     const todayStr = formatDateString(today);

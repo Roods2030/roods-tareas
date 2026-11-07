@@ -443,12 +443,20 @@
 
                 <!-- ADMIN TAB CONTENT: ROLES SEMANALES -->
                 <div class="tab-content admin-content" id="adminContentRoles">
-                    <div class="flex-header">
-                        <h3>Programación de Roles Semanales</h3>
-                        <div class="week-selector-container">
-                            <button class="btn-small" onclick="adjustRoleWeek(-7)">◀</button>
-                            <span id="roleWeekLabel" class="bold-label">Semana del Miércoles...</span>
-                            <button class="btn-small" onclick="adjustRoleWeek(7)">▶</button>
+                    <div class="flex-header" style="flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="margin: 0;">Programación de Roles Semanales</h3>
+                            <p class="help-text" style="margin: 4px 0 0 0;">El ciclo semanal va de Miércoles a Lunes. Los Martes son de descanso.</p>
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <button class="btn-primary" onclick="openPrintChecklistModal()" style="background: linear-gradient(135deg, #4A148C, #7B1FA2); border: none; border-radius: 8px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; padding: 7px 12px; color: white; cursor: pointer; font-size: 0.82rem; box-shadow: 0 2px 6px rgba(74, 20, 140, 0.25);">
+                                🖨️ Fichas Semanales (Checklist)
+                            </button>
+                            <div class="week-selector-container">
+                                <button class="btn-small" onclick="adjustRoleWeek(-7)">◀</button>
+                                <span id="roleWeekLabel" class="bold-label">Semana del Miércoles...</span>
+                                <button class="btn-small" onclick="adjustRoleWeek(7)">▶</button>
+                            </div>
                         </div>
                     </div>
                     <p class="help-text">El ciclo semanal va de Miércoles a Lunes. Los Martes son de descanso.</p>
@@ -609,8 +617,13 @@
                 <!-- ADMIN TAB CONTENT: TAREAS CSV -->
                 <div class="tab-content admin-content" id="adminContentTareasCsv">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
-                        <h3>Gestión y Editor de Misiones Base</h3>
-                        <button class="btn-primary" onclick="openTaskTemplateModal()">Agregar Nueva Misión ➕</button>
+                        <h3 style="margin: 0;">Gestión y Editor de Misiones Base</h3>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                            <button class="btn-primary" onclick="openPrintChecklistModal()" style="background: linear-gradient(135deg, #4A148C, #7B1FA2); border: none; border-radius: 8px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; color: white; cursor: pointer; box-shadow: 0 3px 8px rgba(74, 20, 140, 0.25);">
+                                🖨️ Imprimir Fichas Semanales (Checklist)
+                            </button>
+                            <button class="btn-primary" onclick="openTaskTemplateModal()">Agregar Nueva Misión ➕</button>
+                        </div>
                     </div>
                     <p class="description">Administra las misiones base directamente en la tabla o expórtalas/impórtalas en formato CSV si prefieres hojas de cálculo.</p>
                     
@@ -822,6 +835,63 @@
         </div>
     </div>
 
+    <!-- MODAL: IMPRIMIR CHECKLISTS SEMANALES (CONTINGENCIA) -->
+    <div id="printChecklistModal" class="modal hidden" style="z-index: 15000; align-items: center; justify-content: center; background: rgba(0,0,0,0.65); padding: 15px;">
+        <div class="modal-content card glass" style="max-width: 480px; width: 100%; border-radius: 18px; padding: 24px; position: relative; background: #ffffff; box-shadow: 0 20px 45px rgba(0,0,0,0.25);">
+            <button class="btn-close" onclick="closePrintChecklistModal()" style="position: absolute; top: 14px; right: 16px; font-size: 1.5rem; background: none; border: none; cursor: pointer; color: #666;">×</button>
+            
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                <span style="font-size: 1.6rem;">🖨️</span>
+                <h3 style="margin: 0; color: #4A148C; font-size: 1.2rem;">Fichas Semanales Impresas (Checklist)</h3>
+            </div>
+            <p style="font-size: 0.82rem; color: #666; margin-bottom: 18px; line-height: 1.4;">
+                Genera e imprime el checklist semanal de misiones por rol con el formato oficial de contingencia (Mié a Lun). Ideal para operar sin internet, luz o ante fallas de dispositivos.
+            </p>
+
+            <form id="printChecklistForm" onsubmit="generateAndPrintChecklists(event)">
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label for="printRoleSelect" style="font-weight: 700; font-size: 0.85rem; color: #333; margin-bottom: 4px; display: block;">Rol a Imprimir:</label>
+                    <select id="printRoleSelect" class="form-control" style="width: 100%; padding: 9px 12px; border-radius: 10px; font-size: 0.9rem; font-weight: 600;">
+                        <option value="ALL">🌟 Todos los Roles (Juego Completo para Sucursal)</option>
+                        <option value="CajiBari">CajiBari (Caja y Barra Matutino)</option>
+                        <option value="CociBari">CociBari (Cocina y Barra Matutino)</option>
+                        <option value="Cajero">Cajero (Turno Vespertino)</option>
+                        <option value="Barista">Barista (Turno Vespertino)</option>
+                        <option value="Cocina">Cocina (Turno Vespertino)</option>
+                        <option value="Apoyo MKT">Apoyo MKT</option>
+                        <option value="Apoyo General">Apoyo General</option>
+                    </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="font-weight: 700; font-size: 0.85rem; color: #333; margin-bottom: 4px; display: block;">Texto de Semana:</label>
+                    <input type="text" id="printWeekInput" class="form-control" placeholder="Ej. 11/Nov al 16/Nov" style="width: 100%; padding: 8px 12px; border-radius: 8px; font-size: 0.88rem; margin-bottom: 6px;">
+                    <label style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #555; cursor: pointer;">
+                        <input type="checkbox" id="printWeekBlank" onchange="togglePrintWeekBlank(this)">
+                        Dejar líneas en blanco para llenar a pluma (___/___ al ___/___)
+                    </label>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label for="printSucursalInput" style="font-weight: 700; font-size: 0.85rem; color: #333; margin-bottom: 4px; display: block;">Sucursal:</label>
+                    <input type="text" id="printSucursalInput" class="form-control" value="Sucursal ROODS" style="width: 100%; padding: 8px 12px; border-radius: 8px; font-size: 0.88rem;">
+                </div>
+
+                <div id="printFallbackContainer" style="display: none; margin-bottom: 15px; padding: 10px; background: #fff3e0; border-radius: 8px; border: 1px solid #ffe0b2; font-size: 0.8rem; color: #e65100;">
+                    <span>⚠️ Si tu navegador bloqueó la ventana emergente, haz clic aquí: </span>
+                    <a id="printFallbackLink" href="#" target="_blank" style="font-weight: bold; color: #d84315; text-decoration: underline;">Abrir Ficha de Impresión 🖨️</a>
+                </div>
+
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn-small" onclick="closePrintChecklistModal()" style="padding: 10px 16px; border-radius: 10px; font-size: 0.88rem;">Cancelar</button>
+                    <button type="submit" class="btn-primary" style="padding: 10px 20px; border-radius: 10px; background: linear-gradient(135deg, #4A148C, #7B1FA2); border: none; color: white; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        🖨️ Generar e Imprimir
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- URGENT ALERT POPUP (Removido) -->
 
     <div id="notification" class="notification">
@@ -897,7 +967,7 @@
     <!-- Supabase SDK (loaded locally to prevent CDN/blockage issues) -->
     <script src="supabase.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.0.61"></script>
+    <script src="app.js?v=1.0.62"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
