@@ -425,6 +425,12 @@ function loadLocalDatabase() {
     
     // Automatically migrate Coci tasks to CociBari and clean Aux. Administrativo
     migrateRolesAndTasks();
+
+    // One-time local cache wipe requested by administrator (fresh start)
+    if (localStorage.getItem('roods_messages_cleared_nov6') !== 'true') {
+        localStorage.setItem('roods_private_messages', JSON.stringify([]));
+        localStorage.setItem('roods_messages_cleared_nov6', 'true');
+    }
 }
 
 function saveLocalDatabase() {
@@ -2091,39 +2097,19 @@ async function pollEmployeeMessages() {
                 
             if (!error && data) {
                 // Authoritative cloud messages
-                const combined = [...data];
-
-                // Check local messages: only preserve those NOT already in the cloud
-                localMessages.forEach(loc => {
-                    const locTime = new Date(loc.created_at || loc.timestamp || 0).getTime();
-                    const locText = String(loc.message || '').trim();
-                    const locSender = String(loc.sender_name || '').trim();
-                    const locRecip = Number(loc.recipient_id || 0);
-
-                    const existsInCloud = data.some(srv => {
-                        if (loc.id && srv.id && String(loc.id) === String(srv.id)) return true;
-                        const srvTime = new Date(srv.created_at || srv.timestamp || 0).getTime();
-                        const srvText = String(srv.message || '').trim();
-                        const srvRecip = Number(srv.recipient_id || 0);
-                        const srvSender = String(srv.sender_name || '').trim();
-
-                        const sameSender = (locSender === srvSender) ||
-                                          (locSender.includes('KRU') && srvSender.includes('KRU')) ||
-                                          (locSender.includes('#') && srvSender.includes('#') && locSender.split('#')[1] === srvSender.split('#')[1]);
-                        const sameText = locText === srvText;
-                        const sameRecip = locRecip === srvRecip;
-                        const withinWindow = Math.abs(locTime - srvTime) <= 45000;
-
-                        return sameText && sameRecip && sameSender && withinWindow;
-                    });
-
-                    if (!existsInCloud) {
-                        // Keep unsynced offline message if recent (< 7 days)
-                        if (Date.now() - locTime < 7 * 24 * 60 * 60 * 1000) {
-                            combined.push(loc);
+                let combined;
+                if (data.length === 0) {
+                    combined = [];
+                } else {
+                    combined = [...data];
+                    localMessages.forEach(loc => {
+                        const locTime = new Date(loc.created_at || loc.timestamp || 0).getTime();
+                        if (Date.now() - locTime < 15 * 60 * 1000) {
+                            const exists = data.some(srv => String(loc.id) === String(srv.id));
+                            if (!exists) combined.push(loc);
                         }
-                    }
-                });
+                    });
+                }
 
                 const allMerged = deduplicateMessagesList(combined);
                 localStorage.setItem('roods_private_messages', JSON.stringify(allMerged));
