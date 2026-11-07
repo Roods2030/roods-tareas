@@ -20,7 +20,7 @@ const ROODS_ROLES = {
         name: 'CociBari',
         shift: 'Matutino',
         hours: '9:30 - 17:30',
-        taskRoles: ['CociBari']
+        taskRoles: ['CociBari', 'Coci']
     },
     'vespertinoCajero': {
         key: 'vespertinoCajero',
@@ -42,20 +42,6 @@ const ROODS_ROLES = {
         shift: 'Vespertino',
         hours: '17:00 - 22:30',
         taskRoles: ['Cocina']
-    },
-    'auxAdministrativo': {
-        key: 'auxAdministrativo',
-        name: 'Aux. Administrativo',
-        shift: 'Matutino',
-        hours: '14:30 - 17:00',
-        taskRoles: ['Aux. Administrativo', 'Administrativo']
-    },
-    'apoyoCocina': {
-        key: 'apoyoCocina',
-        name: 'Coci',
-        shift: 'Matutino',
-        hours: '14:30 - 17:00',
-        taskRoles: ['Coci', 'Apoyo Cocina', 'Apoyo']
     },
     'apoyoMkt': {
         key: 'apoyoMkt',
@@ -80,6 +66,8 @@ let attendanceLogs = [];
 let swapRequests = [];
 let taskTemplates = [];
 let dailyTasks = []; // Active instances of tasks for the current day
+let employeeSchedules = JSON.parse(localStorage.getItem('roods_employee_schedules') || '{}');
+let activeAdminChatRecipientId = null;
 
 let currentPIN = "";
 let currentUser = null; // Currently logged in user
@@ -117,16 +105,6 @@ const DEFAULT_ROLE_MISSIONS = {
         description: 'Elaborar cada orden con dedicación, consistencia y los más altos estándares de higiene y seguridad alimentaria. Velar por la rotación de insumos y dejar la estación desinfectada y lista para el siguiente día.',
         image: 'kru_welcome.png?v=2'
     },
-    'auxAdministrativo': {
-        title: 'Auxiliar Administrativo',
-        description: 'Supervisar la correcta operación de la sucursal, conciliar inventarios clave, apoyar en momentos de alta afluencia y verificar el cumplimiento de los estándares de calidad y orden del equipo.',
-        image: 'kru_avatar.jpg'
-    },
-    'apoyoCocina': {
-        title: 'Coci (Apoyo de Cocina)',
-        description: 'Brindar apoyo estratégico y ágil en la cocina: preparación previa de ingredientes, lavado de loza y utensilios, y agilización del pase de platillos para mantener un flujo continuo y ordenado.',
-        image: 'kru_avatar.jpg'
-    },
     'apoyoMkt': {
         title: 'Apoyo Marketing (MKT)',
         description: 'Capturar momentos auténticos en sucursal, crear contenido dinámico para redes sociales, apoyar en la promoción de productos estrella y proyectar la calidez y personalidad de la marca ROODS.',
@@ -138,6 +116,101 @@ const DEFAULT_ROLE_MISSIONS = {
         image: 'kru_welcome.png?v=2'
     }
 };
+
+// --- Employee Schedule Helpers ---
+function getEmployeeSchedule(empId) {
+    if (!empId) return { entry: '09:30', exit: '17:30', hours: '9:30 - 17:30' };
+    const emp = employees.find(e => Number(e.id) === Number(empId));
+    const schedSaved = employeeSchedules[String(empId)] || employeeSchedules[Number(empId)] || {};
+    
+    const entry = (emp && emp.schedule_entry) || schedSaved.entry || '09:30';
+    const exit = (emp && emp.schedule_exit) || schedSaved.exit || '17:30';
+    const hours = (emp && emp.schedule_hours) || schedSaved.hours || `${entry} - ${exit}`;
+    return { entry, exit, hours };
+}
+
+function setEmployeeSchedulePreset(entry, exit) {
+    const entryInput = document.getElementById('empScheduleEntry');
+    const exitInput = document.getElementById('empScheduleExit');
+    if (entryInput) entryInput.value = entry;
+    if (exitInput) exitInput.value = exit;
+}
+
+async function saveEmployeeSchedulesConfigCloud() {
+    if (!supabaseClient) return;
+    try {
+        const payload = {
+            message: JSON.stringify({
+                type: 'EMPLOYEE_SCHEDULES',
+                data: employeeSchedules,
+                updated_at: new Date().toISOString()
+            }),
+            created_by_name: 'SYSTEM_CONFIG'
+        };
+        await supabaseClient.from('roods_announcements').insert(payload);
+    } catch(e) {
+        console.warn("Could not sync employee schedules to cloud:", e);
+    }
+}
+
+// --- Roles & Tasks Migration Helper ---
+function migrateRolesAndTasks() {
+    let tasksChanged = false;
+
+    // 1. Clean task templates
+    if (Array.isArray(taskTemplates)) {
+        const initialLen = taskTemplates.length;
+        // Filter out Aux. Administrativo
+        taskTemplates = taskTemplates.filter(t => {
+            const r = (t.Rol || '').trim();
+            return r !== 'Aux. Administrativo' && r !== 'Administrativo';
+        });
+        // Migrate Coci to CociBari
+        taskTemplates.forEach(t => {
+            if ((t.Rol || '').trim() === 'Coci') {
+                t.Rol = 'CociBari';
+                tasksChanged = true;
+            }
+        });
+        if (taskTemplates.length !== initialLen || tasksChanged) {
+            localStorage.setItem('roods_task_templates', JSON.stringify(taskTemplates));
+        }
+    }
+
+    // 2. Clean daily tasks
+    if (Array.isArray(dailyTasks)) {
+        let dailyChanged = false;
+        const initialDailyLen = dailyTasks.length;
+        dailyTasks = dailyTasks.filter(t => {
+            const r = (t.role_name || t.assigned_role || '').trim();
+            return r !== 'Aux. Administrativo' && r !== 'Administrativo';
+        });
+        dailyTasks.forEach(t => {
+            if ((t.role_name || '').trim() === 'Coci') {
+                t.role_name = 'CociBari';
+                dailyChanged = true;
+            }
+            if ((t.assigned_role || '').trim() === 'Coci') {
+                t.assigned_role = 'CociBari';
+                dailyChanged = true;
+            }
+        });
+        if (dailyTasks.length !== initialDailyLen || dailyChanged) {
+            localStorage.setItem('roods_daily_tasks', JSON.stringify(dailyTasks));
+        }
+    }
+
+    // 3. Clean weeklyRoles
+    if (weeklyRoles && typeof weeklyRoles === 'object') {
+        Object.values(weeklyRoles).forEach(weekMap => {
+            if (weekMap) {
+                delete weekMap['auxAdministrativo'];
+                delete weekMap['apoyoCocina'];
+            }
+        });
+        localStorage.setItem('roods_weekly_roles', JSON.stringify(weeklyRoles));
+    }
+}
 
 let roleMissions = (() => {
     try {
@@ -349,6 +422,9 @@ function loadLocalDatabase() {
         console.error("Error loading task templates, resetting:", e);
         parseTasksCsv(DEFAULT_TASKS_CSV);
     }
+    
+    // Automatically migrate Coci tasks to CociBari and clean Aux. Administrativo
+    migrateRolesAndTasks();
 }
 
 function saveLocalDatabase() {
@@ -589,10 +665,14 @@ async function syncFromCloud() {
                         } else if ((parsed.type === 'APP_BANNERS' || parsed.type === 'APP_BANNERS_CONFIG') && parsed.data) {
                             appBanners = { ...DEFAULT_BANNERS, ...parsed.data };
                             localStorage.setItem('roods_app_banners', JSON.stringify(appBanners));
+                        } else if (parsed.type === 'EMPLOYEE_SCHEDULES' && parsed.data) {
+                            employeeSchedules = { ...employeeSchedules, ...parsed.data };
+                            localStorage.setItem('roods_employee_schedules', JSON.stringify(employeeSchedules));
                         }
                     } catch(e) {}
                 });
             }
+            migrateRolesAndTasks();
         } catch(e) {
             console.warn("Could not sync system configurations:", e);
         }
@@ -958,12 +1038,13 @@ function resolveTodaySchedules(empId, date) {
                     if (swappedRoleNames.includes(roleInfo.name)) {
                         continue;
                     }
+                    const empSched = getEmployeeSchedule(empId);
                     schedules.push({
                         roleKey: roleInfo.key,
                         roleName: roleInfo.name,
                         roleDisplay: roleInfo.name,
                         shift: roleInfo.shift,
-                        hours: roleInfo.hours,
+                        hours: empSched.hours || roleInfo.hours,
                         roles: roleInfo.taskRoles,
                         isSwap: false
                     });
@@ -1152,10 +1233,12 @@ function performCheckIn(roleKey) {
     const todayStr = formatDateString(today);
     const timeStr = today.toTimeString().split(' ')[0];
 
-    // Evaluate punctuality (4 minutes tolerance)
+    // Evaluate punctuality (4 minutes tolerance) based on employee's personal schedule
     let isPunctual = true;
-    if (roleInfo.hours) {
-        const startTimeStr = roleInfo.hours.split('-')[0].trim();
+    const empSched = getEmployeeSchedule(currentUser.id);
+    const targetHours = empSched.hours || roleInfo.hours;
+    if (targetHours) {
+        const startTimeStr = targetHours.split('-')[0].trim();
         const parts = startTimeStr.split(':').map(Number);
         if (parts.length >= 2) {
             const scheduledStartMins = parts[0] * 60 + parts[1];
@@ -1592,12 +1675,22 @@ function isEmployeeShiftCompletedForTask(task) {
 }
 
 function createTaskItemElement(task, isCollab, isReadOnly = false) {
+    const isSpecialTemporary = Boolean(
+        task.is_manual ||
+        task.is_tomorrow_task ||
+        (task.assigned_employee_id && !String(task.id).includes('default')) ||
+        (task.id && (String(task.id).startsWith('manual_') || String(task.id).startsWith('tomorrow_')))
+    );
+
     const item = document.createElement('div');
-    item.className = `task-item ${task.completed ? 'completed' : ''} ${isReadOnly ? 'read-only' : ''}`;
+    item.className = `task-item ${task.completed ? 'completed' : ''} ${isReadOnly ? 'read-only' : ''} ${isSpecialTemporary ? 'special-temporary-mission' : ''}`;
     item.style.flexDirection = "column";
     item.style.alignItems = "stretch";
     
     let metaText = `Rol: ${task.role_name}`;
+    if (isSpecialTemporary) {
+        metaText += ` | ⭐ Asignada para hoy`;
+    }
     if (task.Imprescindible === 'Si') {
         metaText += ` | ⚠️ Imprescindible`;
     }
@@ -1622,13 +1715,17 @@ function createTaskItemElement(task, isCollab, isReadOnly = false) {
         ? ` (${completedCount}/${task.subtasks_state.length})`
         : "";
 
+    const specialBadgeHtml = isSpecialTemporary 
+        ? '<span class="special-mission-badge">⭐ Misión Especial</span> ' 
+        : '';
+
     item.innerHTML = `
         <div class="task-main-row" style="display: flex; align-items: center; width: 100%;">
             <div class="task-checkbox-container" id="chk-${task.id}">
                 <span class="check-icon">✓</span>
             </div>
             <div class="task-text-container" style="flex-grow: 1; padding: 4px 0;">
-                <span class="task-name">${task.task_name}${subtaskSummary}</span>
+                <span class="task-name">${specialBadgeHtml}${task.task_name}${subtaskSummary}</span>
                 <span class="task-meta ${task.completed ? 'completed-by' : ''}">${metaText}</span>
             </div>
             ${hasSubtasks ? '<span class="chevron-icon" style="margin-left: 8px; font-weight: bold; cursor: pointer; transition: transform 0.2s; padding: 4px;">▼</span>' : ''}
@@ -2399,6 +2496,7 @@ function dismissKruWelcomeModal() {
 function initAdminView() {
     switchAdminTab('monitoreo');
     renderAdminMonitoreo();
+    setTimeout(checkAdminPendingMessagesAlert, 800);
 }
 
 function toPascalCase(str) {
@@ -2613,7 +2711,7 @@ function renderAdminMonitoreo() {
                 <!-- Quick Task Form -->
                 <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed rgba(0,0,0,0.08); padding-top: 8px;">
                     <div style="display: flex; gap: 6px; align-items: center;">
-                        <input type="text" id="quickTaskName-${emp.id}-${sched.roleKey}" placeholder="Nueva tarea..." class="form-control" style="font-size:0.75rem; padding: 4px 8px; margin: 0; flex-grow: 1; height: 28px;">
+                        <input type="text" id="quickTaskName-${emp.id}-${sched.roleKey}" placeholder="Nueva tarea..." class="form-control" style="font-size:0.75rem; padding: 4px 8px; margin: 0; flex-grow: 1; height: 28px;" onkeydown="if(event.key==='Enter') addQuickTask(${emp.id}, '${sched.roleKey}', '${sched.shift}', '${sched.roleName}')">
                         <button class="btn-primary" onclick="addQuickTask(${emp.id}, '${sched.roleKey}', '${sched.shift}', '${sched.roleName}')" style="font-size:0.75rem; padding: 4px 10px; margin: 0; border: none; border-radius: 4px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: bold; background: linear-gradient(135deg, var(--primary-gradient-start), var(--primary-gradient-end)); color: white; cursor: pointer;">➕</button>
                     </div>
                     <div style="display: flex; align-items: center; gap: 12px; font-size: 0.7rem; color: var(--text-secondary);">
@@ -2639,9 +2737,12 @@ function renderAdminMonitoreo() {
 function populateTomorrowEmployees() {
     const sel = document.getElementById('tomorrowTaskEmployee');
     if (!sel) return;
+    if (document.activeElement === sel) return; // Don't disturb open dropdown
+    const nonAdminEmps = employees.filter(e => !e.is_admin);
+    if (sel.options.length === nonAdminEmps.length + 1) return; // Already populated
     const currentVal = sel.value;
     sel.innerHTML = '<option value="">-- Seleccionar colaborador --</option>';
-    employees.filter(e => !e.is_admin).forEach(emp => {
+    nonAdminEmps.forEach(emp => {
         const opt = document.createElement('option');
         opt.value = emp.id;
         opt.textContent = emp.nickname ? `${emp.nickname} (${emp.name})` : emp.name;
@@ -2995,8 +3096,10 @@ function updateAdminUnreadBadge(allMessages) {
         if (unreadMsgs.length > 0) {
             badge.textContent = unreadMsgs.length > 99 ? '99+' : unreadMsgs.length;
             badge.classList.remove('hidden');
+            badge.classList.add('pulse');
         } else {
             badge.classList.add('hidden');
+            badge.classList.remove('pulse');
         }
     }
 
@@ -3011,6 +3114,61 @@ function updateAdminUnreadBadge(allMessages) {
             } catch(e) {}
         }
         lastNotifiedAdminMsgId = newestId;
+    }
+}
+
+// Check and show pending messages balloon when Admin / RH enters app
+function checkAdminPendingMessagesAlert() {
+    if (!currentUser || !currentUser.is_admin) return;
+    const localMsgs = deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
+    const unreadMsgs = localMsgs.filter(m => {
+        const isFromKru = (m.sender_name === 'KRU' || m.sender_name === 'KRU (Gerencia Virtual)');
+        return !isFromKru && !m.read;
+    });
+    
+    if (unreadMsgs.length === 0) return;
+
+    const senderNamesSet = new Set();
+    unreadMsgs.forEach(m => {
+        let name = null;
+        if (m.sender_employee_id) {
+            const f = employees.find(e => Number(e.id) === Number(m.sender_employee_id));
+            if (f) name = f.nickname || f.name;
+        }
+        if (!name && m.sender_name) {
+            name = m.sender_name.replace(' (Colaborador)', '');
+        }
+        if (name) senderNamesSet.add(name);
+    });
+
+    const sendersStr = Array.from(senderNamesSet).join(', ') || 'colaboradores';
+    const modal = document.getElementById('adminPendingMessagesModal');
+    const textEl = document.getElementById('adminPendingMessagesText');
+    if (modal && textEl) {
+        textEl.innerHTML = `Tienes <strong>${unreadMsgs.length} mensaje${unreadMsgs.length > 1 ? 's' : ''} sin leer</strong> de:<br><strong style="color: #075e54; font-size: 1rem;">${sendersStr}</strong>`;
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+    }
+}
+
+function closeAdminPendingMessagesModal() {
+    const modal = document.getElementById('adminPendingMessagesModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
+}
+
+function goToAdminPendingMessages() {
+    closeAdminPendingMessagesModal();
+    switchAdminTab('comunicados');
+    const localMsgs = deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
+    const unread = localMsgs.find(m => {
+        const isFromKru = (m.sender_name === 'KRU' || m.sender_name === 'KRU (Gerencia Virtual)');
+        return !isFromKru && !m.read && m.sender_employee_id;
+    });
+    if (unread && unread.sender_employee_id) {
+        openAdminWhatsappChat(unread.sender_employee_id);
     }
 }
 
@@ -3029,6 +3187,7 @@ async function markAdminChatAsRead(recipientId) {
     if (modified) {
         localStorage.setItem('roods_private_messages', JSON.stringify(localMessages));
         updateAdminUnreadBadge(localMessages);
+        renderAdminWhatsappInbox();
     }
     if (supabaseClient) {
         try {
@@ -3041,12 +3200,159 @@ async function markAdminChatAsRead(recipientId) {
     }
 }
 
+function renderAdminComunicados() {
+    loadRecentAnnouncements();
+    renderAdminWhatsappInbox();
+    if (activeAdminChatRecipientId) {
+        renderAdminSelectedChat();
+    }
+    const localMsgs = deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
+    updateAdminUnreadBadge(localMsgs);
+}
+
+function renderAdminWhatsappInbox() {
+    const list = document.getElementById('adminWhatsappList');
+    const totalUnreadBadge = document.getElementById('adminWhatsappTotalUnread');
+    if (!list) return;
+
+    const localMsgs = deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
+    const nonAdmins = employees.filter(e => !e.is_admin);
+    const searchVal = (document.getElementById('adminWhatsappSearch')?.value || '').toLowerCase().trim();
+
+    let totalUnreadCount = 0;
+    let itemsHtml = '';
+
+    const sortedEmps = [...nonAdmins].sort((a, b) => {
+        const aMsgs = localMsgs.filter(m => (m.sender_employee_id && Number(m.sender_employee_id) === Number(a.id)) || Number(m.recipient_id) === Number(a.id) || (m.sender_name && m.sender_name.includes(`#${a.id}`)));
+        const bMsgs = localMsgs.filter(m => (m.sender_employee_id && Number(m.sender_employee_id) === Number(b.id)) || Number(m.recipient_id) === Number(b.id) || (m.sender_name && m.sender_name.includes(`#${b.id}`)));
+        const aUnread = aMsgs.some(m => !m.read && ((m.sender_employee_id && Number(m.sender_employee_id) === Number(a.id)) || (m.sender_name && m.sender_name.includes(`#${a.id}`))));
+        const bUnread = bMsgs.some(m => !m.read && ((m.sender_employee_id && Number(m.sender_employee_id) === Number(b.id)) || (m.sender_name && m.sender_name.includes(`#${b.id}`))));
+        if (aUnread && !bUnread) return -1;
+        if (!aUnread && bUnread) return 1;
+        const aLastTime = aMsgs.length ? new Date(aMsgs[aMsgs.length - 1].created_at || 0).getTime() : 0;
+        const bLastTime = bMsgs.length ? new Date(bMsgs[bMsgs.length - 1].created_at || 0).getTime() : 0;
+        return bLastTime - aLastTime;
+    });
+
+    sortedEmps.forEach(emp => {
+        const empName = emp.nickname ? `${emp.nickname} (${emp.name})` : emp.name;
+        if (searchVal && !empName.toLowerCase().includes(searchVal) && !emp.name.toLowerCase().includes(searchVal)) {
+            return;
+        }
+
+        const empMsgs = localMsgs.filter(m => 
+            (m.sender_employee_id && Number(m.sender_employee_id) === Number(emp.id)) || 
+            Number(m.recipient_id) === Number(emp.id) || 
+            (m.sender_name && m.sender_name.includes(`#${emp.id}`))
+        );
+
+        const unreadCount = empMsgs.filter(m => 
+            !m.read && 
+            ((m.sender_employee_id && Number(m.sender_employee_id) === Number(emp.id)) || 
+             (m.sender_name && m.sender_name.includes(`#${emp.id}`)))
+        ).length;
+
+        if (unreadCount > 0) totalUnreadCount += unreadCount;
+
+        const lastMsg = empMsgs.length ? empMsgs[empMsgs.length - 1] : null;
+        let snippet = 'Sin mensajes previos';
+        let timeStr = '';
+        if (lastMsg) {
+            timeStr = lastMsg.created_at ? formatTimeString(lastMsg.created_at) : '';
+            if (lastMsg.photo_url && !lastMsg.message) {
+                snippet = '📷 Foto adjunta';
+            } else if (lastMsg.photo_url) {
+                snippet = `📷 ${lastMsg.message}`;
+            } else {
+                snippet = lastMsg.message || '';
+            }
+            if (lastMsg.sender_name === 'KRU') {
+                snippet = `Tú: ${snippet}`;
+            }
+        }
+
+        const unreadBadgeHtml = unreadCount > 0 
+            ? `<span class="whatsapp-unread-pill">${unreadCount}</span>` 
+            : '';
+
+        const photoSrc = emp.photo || '';
+        const isActive = activeAdminChatRecipientId === Number(emp.id) ? 'active' : '';
+
+        itemsHtml += `
+            <div class="whatsapp-inbox-item ${isActive}" onclick="openAdminWhatsappChat(${emp.id})">
+                <div class="profile-pic-container" style="width: 44px; height: 44px; flex-shrink: 0; margin: 0;">
+                    <img src="${photoSrc}" alt="Avatar" class="avatar-img" onerror="this.src='data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23888888%22%3E%3Cpath%20d%3D%22M12%202C6.48%202%202%206.48%202%2012s4.48%2010%2010%2010%2010-4.48%2010-10S17.52%202%2012%202zm0%203c1.66%200%203%201.34%203%203s-1.34%203-3%203-3-1.34-3-3%201.34-3%203-3zm0%2014.2c-2.5%200-4.71-1.28-6-3.22.03-1.99%204-3.08%206-3.08%201.99%200%205.97%201.09%206%203.08-1.29%201.94-3.5%203.22-6%203.22z%22%2F%3E%3C%2Fsvg%3E'">
+                </div>
+                <div style="flex-grow: 1; min-width: 0;">
+                    <h4 class="whatsapp-inbox-name">${empName}</h4>
+                    <p class="whatsapp-inbox-snippet">${snippet}</p>
+                </div>
+                <div class="whatsapp-inbox-meta">
+                    <span class="whatsapp-inbox-time">${timeStr}</span>
+                    ${unreadBadgeHtml}
+                </div>
+            </div>
+        `;
+    });
+
+    if (totalUnreadBadge) {
+        if (totalUnreadCount > 0) {
+            totalUnreadBadge.textContent = `${totalUnreadCount} nuevo${totalUnreadCount > 1 ? 's' : ''}`;
+            totalUnreadBadge.style.display = 'inline-block';
+        } else {
+            totalUnreadBadge.style.display = 'none';
+        }
+    }
+
+    list.innerHTML = itemsHtml || '<div style="padding: 20px; text-align: center; color: #888; font-size: 0.85rem;">No se encontraron colaboradores</div>';
+}
+
+function filterAdminWhatsappInbox() {
+    renderAdminWhatsappInbox();
+}
+
+function openAdminWhatsappChat(empId) {
+    activeAdminChatRecipientId = Number(empId);
+    const emp = employees.find(e => Number(e.id) === activeAdminChatRecipientId);
+    if (!emp) return;
+
+    const inboxView = document.getElementById('adminWhatsappInboxView');
+    const chatView = document.getElementById('adminWhatsappChatView');
+    if (inboxView && chatView) {
+        inboxView.style.display = 'none';
+        chatView.style.display = 'flex';
+    }
+
+    const headerName = document.getElementById('adminChatHeaderName');
+    const headerAvatar = document.getElementById('adminChatHeaderAvatar');
+    const recipientHidden = document.getElementById('privateMessageRecipient');
+
+    if (headerName) headerName.textContent = emp.nickname ? `${emp.nickname} (${emp.name})` : emp.name;
+    if (headerAvatar) headerAvatar.src = emp.photo || '';
+    if (recipientHidden) recipientHidden.value = emp.id;
+
+    renderAdminSelectedChat();
+    // Update inbox counters in background
+    const localMsgs = deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
+    updateAdminUnreadBadge(localMsgs);
+}
+
+function closeAdminWhatsappChat() {
+    activeAdminChatRecipientId = null;
+    const inboxView = document.getElementById('adminWhatsappInboxView');
+    const chatView = document.getElementById('adminWhatsappChatView');
+    if (inboxView && chatView) {
+        chatView.style.display = 'none';
+        inboxView.style.display = 'block';
+    }
+    renderAdminWhatsappInbox();
+}
+
 function renderAdminSelectedChat() {
     const container = document.getElementById('adminChatMessagesList');
-    const select = document.getElementById('privateMessageRecipient');
-    if (!container || !select) return;
+    if (!container) return;
 
-    const recipientId = Number(select.value);
+    const recipientId = activeAdminChatRecipientId || Number(document.getElementById('privateMessageRecipient')?.value);
     if (!recipientId) {
         container.innerHTML = '<span style="color: #888;">Selecciona un colaborador para ver la conversación.</span>';
         return;
@@ -3060,11 +3366,8 @@ function renderAdminSelectedChat() {
 
     const rawMsgs = JSON.parse(localStorage.getItem('roods_private_messages') || '[]');
     const localMsgs = deduplicateMessagesList(rawMsgs);
-    // Filter messages between KRU/Admin and this specific employee
     const conversation = localMsgs.filter(m => {
-        // Sent to this employee by Admin / KRU
         if (Number(m.recipient_id) === recipientId) return true;
-        // Sent by this employee to Admin / KRU
         if (m.sender_employee_id && Number(m.sender_employee_id) === recipientId) return true;
         if (m.sender_name && m.sender_name.includes(`#${recipientId}`)) return true;
         if (emp && (m.sender_name === emp.name || m.sender_name === emp.nickname)) return true;
@@ -3074,60 +3377,35 @@ function renderAdminSelectedChat() {
     const cleanConversation = deduplicateMessagesList(conversation);
 
     if (cleanConversation.length === 0) {
-        container.innerHTML = `<span style="color: #888;">Aún no hay mensajes intercambiados con ${empName}.</span>`;
+        container.innerHTML = `<div style="text-align: center; color: #888; padding: 25px 15px; font-size: 0.85rem;">
+            <span>👋 Inicia la conversación con <strong>${empName}</strong> como KRU.</span>
+        </div>`;
         return;
     }
 
     let html = '';
     cleanConversation.forEach(m => {
         const isFromKru = (m.sender_name === 'KRU' || m.sender_name === 'KRU (Gerencia Virtual)' || (!m.sender_name.includes(`#${recipientId}`) && Number(m.recipient_id) === recipientId && (!m.sender_employee_id || Number(m.sender_employee_id) !== recipientId)));
-        const senderLabel = isFromKru ? 'KRU 🤖' : empName;
-        const align = isFromKru ? 'flex-end' : 'flex-start';
-        const bg = isFromKru ? 'linear-gradient(135deg, #1976d2, #1565c0)' : '#f0f0f0';
-        const color = isFromKru ? '#ffffff' : '#333333';
+        const bubbleClass = isFromKru ? 'whatsapp-bubble-kru' : 'whatsapp-bubble-employee';
+        const senderLabel = isFromKru ? 'KRU' : empName;
         const timeStr = m.created_at ? formatTimeString(m.created_at) : '';
         const photoHtml = m.photo_url ? `<div style="margin-top: 6px;"><img src="${m.photo_url}" onclick="viewFullImage('${m.photo_url}')" style="max-width: 100%; max-height: 180px; border-radius: 8px; cursor: pointer; object-fit: contain; background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.1);"></div>` : '';
 
         html += `
-            <div style="display: flex; flex-direction: column; align-items: ${align}; margin-bottom: 8px; max-width: 100%;">
-                <span style="font-size: 0.7rem; color: #888; margin-bottom: 2px;">${senderLabel} · ${timeStr}</span>
-                <div style="background: ${bg}; color: ${color}; padding: 8px 12px; border-radius: 12px; max-width: 85%; word-break: break-word; overflow-wrap: anywhere; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    ${m.message || ''}
-                    ${photoHtml}
+            <div class="${bubbleClass}">
+                <div style="font-size: 0.72rem; font-weight: 700; color: ${isFromKru ? '#075e54' : '#1565c0'}; margin-bottom: 2px;">
+                    ${senderLabel}
+                </div>
+                <div style="font-size: 0.9rem; line-height: 1.35;">${m.message || ''}</div>
+                ${photoHtml}
+                <div style="font-size: 0.68rem; color: #888; text-align: right; margin-top: 4px;">
+                    ${timeStr} ${isFromKru ? '✓✓' : ''}
                 </div>
             </div>
         `;
     });
     container.innerHTML = html;
     container.scrollTop = container.scrollHeight;
-}
-
-function renderAdminComunicados() {
-    const select = document.getElementById('privateMessageRecipient');
-    const localMsgs = deduplicateMessagesList(JSON.parse(localStorage.getItem('roods_private_messages') || '[]'));
-    if (select) {
-        const cur = select.value;
-        let html = '<option value="">-- Selecciona Colaborador --</option>';
-        const nonAdmins = employees.filter(e => !e.is_admin);
-        nonAdmins.forEach(emp => {
-            const hasUnread = localMsgs.some(m => {
-                const isFromThisEmp = (m.sender_employee_id && Number(m.sender_employee_id) === Number(emp.id)) ||
-                                      (m.sender_name && m.sender_name.includes(`#${emp.id}`));
-                return isFromThisEmp && !m.read;
-            });
-            const unreadMarker = hasUnread ? ' 💬 (Nuevo)' : '';
-            html += `<option value="${emp.id}">${emp.nickname || emp.name}${unreadMarker}</option>`;
-        });
-        select.innerHTML = html;
-        if (cur) {
-            select.value = cur;
-        } else if (nonAdmins.length > 0) {
-            select.value = nonAdmins[0].id;
-        }
-    }
-    loadRecentAnnouncements();
-    renderAdminSelectedChat();
-    updateAdminUnreadBadge(localMsgs);
 }
 
 async function loadRecentAnnouncements() {
@@ -3199,11 +3477,11 @@ async function sendPrivateMessage(event) {
     if (event) event.preventDefault();
     if (isSendingAdminMessage) return;
 
-    const recipientSelect = document.getElementById('privateMessageRecipient');
+    const recipientHidden = document.getElementById('privateMessageRecipient');
     const textInput = document.getElementById('privateMessageText');
-    if (!recipientSelect || !textInput) return;
+    if (!textInput) return;
 
-    const recipientId = recipientSelect.value;
+    const recipientId = activeAdminChatRecipientId || (recipientHidden ? recipientHidden.value : null);
     const text = textInput.value.trim();
     const photo = tempAdminPhotoBase64 || null;
     
@@ -3217,7 +3495,7 @@ async function sendPrivateMessage(event) {
         return;
     }
 
-    const submitBtn = document.querySelector('#privateMessageForm button[type="submit"]');
+    const submitBtn = document.querySelector('#adminWhatsappChatForm button[type="submit"]');
     isSendingAdminMessage = true;
     if (submitBtn) submitBtn.disabled = true;
 
@@ -3241,10 +3519,11 @@ async function sendPrivateMessage(event) {
         localMsgs.push(obj);
         localStorage.setItem('roods_private_messages', JSON.stringify(deduplicateMessagesList(localMsgs)));
         
-        showNotification("✉️ Mensaje enviado como KRU exitosamente.");
+        showNotification("✉️ Mensaje enviado como KRU.");
         textInput.value = "";
         clearAdminPhotoPreview();
         renderAdminSelectedChat();
+        renderAdminWhatsappInbox();
 
         if (supabaseClient) {
             try {
@@ -3257,7 +3536,6 @@ async function sendPrivateMessage(event) {
                 };
                 let { data: inserted, error } = await supabaseClient.from('roods_private_messages').insert(dbPayload).select();
                 if (error) {
-                    // If photo_url column is missing in DB schema, retry without it
                     if (String(error.message || '').includes('photo_url')) {
                         delete dbPayload.photo_url;
                         const retryRes = await supabaseClient.from('roods_private_messages').insert(dbPayload).select();
@@ -3427,8 +3705,6 @@ function renderAdminWeeklyRoles() {
         'roleVespertinoCajero',
         'roleVespertinoBarista',
         'roleVespertinoCocina',
-        'roleAuxAdministrativo',
-        'roleApoyoCocina',
         'roleApoyoMkt',
         'roleApoyoGeneral'
     ];
@@ -3460,8 +3736,6 @@ function getRoleKeyFromSelectId(id) {
     if (id === 'roleVespertinoCajero') return 'vespertinoCajero';
     if (id === 'roleVespertinoBarista') return 'vespertinoBarista';
     if (id === 'roleVespertinoCocina') return 'vespertinoCocina';
-    if (id === 'roleAuxAdministrativo') return 'auxAdministrativo';
-    if (id === 'roleApoyoCocina') return 'apoyoCocina';
     if (id === 'roleApoyoMkt') return 'apoyoMkt';
     if (id === 'roleApoyoGeneral') return 'apoyoGeneral';
     return '';
@@ -3484,8 +3758,6 @@ function saveWeeklyRoles() {
         'roleVespertinoCajero',
         'roleVespertinoBarista',
         'roleVespertinoCocina',
-        'roleAuxAdministrativo',
-        'roleApoyoCocina',
         'roleApoyoMkt',
         'roleApoyoGeneral'
     ];
@@ -4077,10 +4349,13 @@ function renderAdminEmployees() {
     tbody.innerHTML = "";
 
     employees.forEach(emp => {
+        const empSched = getEmployeeSchedule(emp.id);
         const tr = document.createElement('tr');
+        const displayName = emp.nickname ? `${emp.name} <small style="color:#777; font-weight:normal;">(${emp.nickname})</small>` : emp.name;
         tr.innerHTML = `
-            <td class="bold-label">${emp.name}</td>
+            <td class="bold-label">${displayName}</td>
             <td style="font-feature-settings: 'tnum'; font-weight: 700; letter-spacing: 1.5px;">${emp.pin}</td>
+            <td><span style="background:#e3f2fd; color:#1565c0; padding:3px 8px; border-radius:8px; font-size:0.8rem; font-weight:700;">⏰ ${empSched.hours}</span></td>
             <td>${emp.is_admin ? '<span class="badge" style="background-color: #e91e63;">RH / Admin</span>' : '<span class="badge" style="background-color: #00bcd4;">Empleado</span>'}</td>
             <td>
                 <button class="btn-outline" style="padding: 6px 12px; font-size: 0.8rem;" onclick="openEditEmployeeModal(${emp.id})">Editar ✏️</button>
@@ -4095,6 +4370,10 @@ function openAddEmployeeModal() {
     document.getElementById('employeeModalTitle').textContent = "Agregar Nuevo Empleado";
     document.getElementById('editEmployeeId').value = "";
     document.getElementById('employeeForm').reset();
+    const entryInput = document.getElementById('empScheduleEntry');
+    const exitInput = document.getElementById('empScheduleExit');
+    if (entryInput) entryInput.value = "09:30";
+    if (exitInput) exitInput.value = "17:30";
     document.getElementById('employeeModal').classList.remove('hidden');
 }
 
@@ -4105,8 +4384,16 @@ function openEditEmployeeModal(empId) {
     document.getElementById('employeeModalTitle').textContent = "Editar Empleado";
     document.getElementById('editEmployeeId').value = emp.id;
     document.getElementById('empName').value = emp.name;
+    const nickInput = document.getElementById('empNickname');
+    if (nickInput) nickInput.value = emp.nickname || "";
     document.getElementById('empPin').value = emp.pin;
     document.getElementById('empAdmin').value = emp.is_admin.toString();
+
+    const sched = getEmployeeSchedule(emp.id);
+    const entryInput = document.getElementById('empScheduleEntry');
+    const exitInput = document.getElementById('empScheduleExit');
+    if (entryInput) entryInput.value = sched.entry || "09:30";
+    if (exitInput) exitInput.value = sched.exit || "17:30";
 
     document.getElementById('employeeModal').classList.remove('hidden');
 }
@@ -4119,8 +4406,12 @@ function submitEmployeeForm(e) {
     e.preventDefault();
     const idVal = document.getElementById('editEmployeeId').value;
     const nameVal = document.getElementById('empName').value.trim();
+    const nicknameVal = document.getElementById('empNickname')?.value.trim() || null;
     const pinVal = document.getElementById('empPin').value.trim();
     const isAdminVal = document.getElementById('empAdmin').value === "true";
+    const entryVal = document.getElementById('empScheduleEntry')?.value || "09:30";
+    const exitVal = document.getElementById('empScheduleExit')?.value || "17:30";
+    const hoursVal = `${entryVal} - ${exitVal}`;
 
     // Validate unique PIN
     const duplicate = employees.find(emp => emp.pin === pinVal && emp.id.toString() !== idVal);
@@ -4129,13 +4420,20 @@ function submitEmployeeForm(e) {
         return;
     }
 
+    let targetEmpId = null;
+
     if (idVal) {
         // Edit Mode
         const idx = employees.findIndex(e => e.id.toString() === idVal);
         if (idx > -1) {
+            targetEmpId = employees[idx].id;
             employees[idx].name = nameVal;
+            employees[idx].nickname = nicknameVal;
             employees[idx].pin = pinVal;
             employees[idx].is_admin = isAdminVal;
+            employees[idx].schedule_entry = entryVal;
+            employees[idx].schedule_exit = exitVal;
+            employees[idx].schedule_hours = hoursVal;
             
             // Clean object to avoid sending read-only or extra database properties (like created_at)
             const pushObj = {
@@ -4150,22 +4448,39 @@ function submitEmployeeForm(e) {
         }
     } else {
         // Add Mode
+        targetEmpId = Date.now();
         const newEmp = {
-            id: Date.now(),
+            id: targetEmpId,
             name: nameVal,
+            nickname: nicknameVal,
             pin: pinVal,
             is_admin: isAdminVal,
             photo: null,
-            nickname: null
+            schedule_entry: entryVal,
+            schedule_exit: exitVal,
+            schedule_hours: hoursVal
         };
         employees.push(newEmp);
-        pushToCloudTable('roods_employees', newEmp);
+        pushToCloudTable('roods_employees', {
+            id: newEmp.id,
+            name: newEmp.name,
+            pin: newEmp.pin,
+            is_admin: newEmp.is_admin,
+            photo: null,
+            nickname: newEmp.nickname
+        });
+    }
+
+    if (targetEmpId) {
+        employeeSchedules[String(targetEmpId)] = { entry: entryVal, exit: exitVal, hours: hoursVal };
+        localStorage.setItem('roods_employee_schedules', JSON.stringify(employeeSchedules));
+        saveEmployeeSchedulesConfigCloud();
     }
 
     saveLocalDatabase();
     closeEmployeeModal();
     renderAdminEmployees();
-    showNotification("Empleado guardado correctamente.");
+    showNotification("Empleado y horario guardados correctamente.");
 }
 
 function deleteEmployee(empId) {
@@ -4195,11 +4510,44 @@ function debouncedRefreshEmployeeTasksUI() {
     }, 250);
 }
 
+function isUserInteractingWithMonitoreoForms() {
+    const active = document.activeElement;
+    if (!active) return false;
+    
+    // Check if user is typing/selecting in quick task form inside any card
+    const grid = document.getElementById('monitoreoGrid');
+    if (grid && grid.contains(active) && (active.tagName === 'INPUT' || active.tagName === 'SELECT' || active.tagName === 'TEXTAREA')) {
+        return true;
+    }
+
+    // Check if user is interacting with tomorrow task form
+    if (active.id === 'tomorrowTaskEmployee' || active.id === 'tomorrowTaskText') {
+        return true;
+    }
+    const tomorrowForm = document.getElementById('tomorrowTaskForm');
+    if (tomorrowForm && tomorrowForm.contains(active)) {
+        return true;
+    }
+
+    // Check if any modal is currently open and focused
+    const openModals = document.querySelectorAll('.modal:not(.hidden)');
+    for (const m of openModals) {
+        if (m.contains(active)) return true;
+    }
+
+    return false;
+}
+
 let debounceRenderAdminMonitoreoTimer = null;
 function debouncedRenderAdminMonitoreo() {
     clearTimeout(debounceRenderAdminMonitoreoTimer);
     debounceRenderAdminMonitoreoTimer = setTimeout(() => {
         if (typeof currentAdminTab !== 'undefined' && currentAdminTab === 'monitoreo') {
+            if (isUserInteractingWithMonitoreoForms()) {
+                // Postpone render while admin is actively interacting with form inputs
+                debounceRenderAdminMonitoreoTimer = setTimeout(debouncedRenderAdminMonitoreo, 1500);
+                return;
+            }
             renderAdminMonitoreo();
         }
     }, 250);
