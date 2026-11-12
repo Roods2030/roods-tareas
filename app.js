@@ -139,6 +139,25 @@ function setEmployeeSchedulePreset(entry, exit) {
 async function saveEmployeeSchedulesConfigCloud() {
     if (!supabaseClient) return;
     try {
+        const { data: oldConfigs } = await supabaseClient
+            .from('roods_announcements')
+            .select('id, message')
+            .eq('created_by_name', 'SYSTEM_CONFIG');
+
+        if (oldConfigs && oldConfigs.length > 0) {
+            const toDel = oldConfigs
+                .filter(c => {
+                    try {
+                        const p = JSON.parse(c.message);
+                        return p.type === 'EMPLOYEE_SCHEDULES';
+                    } catch(e) { return false; }
+                })
+                .map(c => c.id);
+            if (toDel.length > 0) {
+                await supabaseClient.from('roods_announcements').delete().in('id', toDel);
+            }
+        }
+
         const payload = {
             message: JSON.stringify({
                 type: 'EMPLOYEE_SCHEDULES',
@@ -662,18 +681,22 @@ async function syncFromCloud() {
                 .order('id', { ascending: false });
 
             if (sysConfigs && sysConfigs.length > 0) {
+                const appliedTypes = new Set();
                 sysConfigs.forEach(cfg => {
                     try {
                         const parsed = JSON.parse(cfg.message);
+                        if (!parsed || !parsed.type || appliedTypes.has(parsed.type)) return;
+                        appliedTypes.add(parsed.type);
+
                         if ((parsed.type === 'ROLE_MISSIONS' || parsed.type === 'ROLE_MISSIONS_CONFIG') && parsed.data) {
                             roleMissions = { ...DEFAULT_ROLE_MISSIONS, ...parsed.data };
-                            localStorage.setItem('roods_role_missions', JSON.stringify(roleMissions));
+                            try { localStorage.setItem('roods_role_missions', JSON.stringify(roleMissions)); } catch(e) {}
                         } else if ((parsed.type === 'APP_BANNERS' || parsed.type === 'APP_BANNERS_CONFIG') && parsed.data) {
                             appBanners = { ...DEFAULT_BANNERS, ...parsed.data };
-                            localStorage.setItem('roods_app_banners', JSON.stringify(appBanners));
+                            try { localStorage.setItem('roods_app_banners', JSON.stringify(appBanners)); } catch(e) {}
                         } else if (parsed.type === 'EMPLOYEE_SCHEDULES' && parsed.data) {
                             employeeSchedules = { ...employeeSchedules, ...parsed.data };
-                            localStorage.setItem('roods_employee_schedules', JSON.stringify(employeeSchedules));
+                            try { localStorage.setItem('roods_employee_schedules', JSON.stringify(employeeSchedules)); } catch(e) {}
                         }
                     } catch(e) {}
                 });
@@ -2145,18 +2168,25 @@ async function pollEmployeeMessages() {
                 .select('*')
                 .eq('created_by_name', 'SYSTEM_CONFIG')
                 .order('id', { ascending: false })
-                .limit(5);
+                .limit(10);
 
             if (sysConfigs && sysConfigs.length > 0) {
+                const appliedTypes = new Set();
                 sysConfigs.forEach(cfg => {
                     try {
                         const parsed = JSON.parse(cfg.message);
+                        if (!parsed || !parsed.type || appliedTypes.has(parsed.type)) return;
+                        appliedTypes.add(parsed.type);
+
                         if ((parsed.type === 'ROLE_MISSIONS' || parsed.type === 'ROLE_MISSIONS_CONFIG') && parsed.data) {
                             roleMissions = { ...DEFAULT_ROLE_MISSIONS, ...parsed.data };
-                            localStorage.setItem('roods_role_missions', JSON.stringify(roleMissions));
+                            try { localStorage.setItem('roods_role_missions', JSON.stringify(roleMissions)); } catch(e) {}
                         } else if ((parsed.type === 'APP_BANNERS' || parsed.type === 'APP_BANNERS_CONFIG') && parsed.data) {
                             appBanners = { ...DEFAULT_BANNERS, ...parsed.data };
-                            localStorage.setItem('roods_app_banners', JSON.stringify(appBanners));
+                            try { localStorage.setItem('roods_app_banners', JSON.stringify(appBanners)); } catch(e) {}
+                        } else if (parsed.type === 'EMPLOYEE_SCHEDULES' && parsed.data) {
+                            employeeSchedules = { ...employeeSchedules, ...parsed.data };
+                            try { localStorage.setItem('roods_employee_schedules', JSON.stringify(employeeSchedules)); } catch(e) {}
                         }
                     } catch(e) {}
                 });
@@ -4330,8 +4360,6 @@ function generateAndPrintChecklists(event) {
             rowsHtml += `
             <tr class="tr-parent">
                 <td class="td-task-parent">📌 ${t.Tarea || ''}${pasosStr}</td>
-                <td style="text-align: center; font-size: 0.68rem; color: #4b5563;">${turnoVal}</td>
-                <td style="text-align: center; font-size: 0.68rem; color: #4b5563;">${freqVal}</td>
                 <td style="text-align: center;">${impBadge}</td>
                 ${dayCells}
             </tr>
@@ -4341,8 +4369,6 @@ function generateAndPrintChecklists(event) {
                 rowsHtml += `
                 <tr class="tr-subtask">
                     <td class="td-task-sub">↳ ${sub}</td>
-                    <td style="text-align: center; font-size: 0.66rem; color: #9ca3af;">${turnoVal}</td>
-                    <td style="text-align: center; font-size: 0.66rem; color: #9ca3af;">${freqVal}</td>
                     <td style="text-align: center;">${impBadge}</td>
                     ${dayCells}
                 </tr>
@@ -4353,7 +4379,7 @@ function generateAndPrintChecklists(event) {
         if (matchedTasks.length === 0) {
             rowsHtml = `
             <tr>
-                <td colspan="10" style="text-align: center; padding: 25px; color: #888;">
+                <td colspan="8" style="text-align: center; padding: 25px; color: #888;">
                     No se encontraron misiones registradas para el rol ${cfg.name}.
                 </td>
             </tr>
@@ -4394,9 +4420,7 @@ function generateAndPrintChecklists(event) {
             <table class="checklist-table">
                 <thead>
                     <tr>
-                        <th style="width: 44%; text-align: left; padding-left: 8px;">TAREA / PROCEDIMIENTO DETALLADO</th>
-                        <th style="width: 8%; text-align: center;">TURNO</th>
-                        <th style="width: 12%; text-align: center;">FRECUENCIA</th>
+                        <th style="width: 64%; text-align: left; padding-left: 8px;">TAREA / PROCEDIMIENTO DETALLADO</th>
                         <th style="width: 6%; text-align: center;">IMP.</th>
                         <th style="width: 5%; text-align: center;">MIÉ</th>
                         <th style="width: 5%; text-align: center;">JUE</th>
@@ -5621,6 +5645,25 @@ async function saveCurrentRoleMission() {
     // Sync to cloud configuration
     if (supabaseClient) {
         try {
+            const { data: oldConfigs } = await supabaseClient
+                .from('roods_announcements')
+                .select('id, message')
+                .eq('created_by_name', 'SYSTEM_CONFIG');
+
+            if (oldConfigs && oldConfigs.length > 0) {
+                const toDel = oldConfigs
+                    .filter(c => {
+                        try {
+                            const p = JSON.parse(c.message);
+                            return p.type === 'ROLE_MISSIONS' || p.type === 'ROLE_MISSIONS_CONFIG';
+                        } catch(e) { return false; }
+                    })
+                    .map(c => c.id);
+                if (toDel.length > 0) {
+                    await supabaseClient.from('roods_announcements').delete().in('id', toDel);
+                }
+            }
+
             await supabaseClient.from('roods_announcements').insert({
                 message: JSON.stringify({ type: 'ROLE_MISSIONS', data: roleMissions }),
                 created_by_name: 'SYSTEM_CONFIG'
@@ -5684,6 +5727,25 @@ async function saveSystemBanners() {
     // Sync to cloud configuration
     if (supabaseClient) {
         try {
+            const { data: oldConfigs } = await supabaseClient
+                .from('roods_announcements')
+                .select('id, message')
+                .eq('created_by_name', 'SYSTEM_CONFIG');
+
+            if (oldConfigs && oldConfigs.length > 0) {
+                const toDel = oldConfigs
+                    .filter(c => {
+                        try {
+                            const p = JSON.parse(c.message);
+                            return p.type === 'APP_BANNERS' || p.type === 'APP_BANNERS_CONFIG';
+                        } catch(e) { return false; }
+                    })
+                    .map(c => c.id);
+                if (toDel.length > 0) {
+                    await supabaseClient.from('roods_announcements').delete().in('id', toDel);
+                }
+            }
+
             await supabaseClient.from('roods_announcements').insert({
                 message: JSON.stringify({ type: 'APP_BANNERS', data: appBanners }),
                 created_by_name: 'SYSTEM_CONFIG'
