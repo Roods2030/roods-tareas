@@ -1,4 +1,4 @@
-﻿Orden,Rol,Turno,Tarea,Subtareas,Imprescindible,Dias
+Orden,Rol,Turno,Tarea,Subtareas,Imprescindible,Dias
 1,CajiBari,Ambos,Ritual de Apertura,Prender máquinas y luces;Hervir agua para tapioca;Preparar tapioca;Revisar llenado de garrafón;Revisar pila en tablet y celular,No,Todos
 2,CajiBari,Ambos,Contar fondo de caja inicial (apertura),Contar fondo en caja;Anotar en reporte;Abrir poster,Si,Todos
 3,CajiBari,Ambos,Limpieza inicial,"Barra bebidas frías;Barra cafetera;Barrer area interior;Trapear área interior y salón, Asear baño clientes;Papel y servitoallas baño",No,Todos
@@ -34,7 +34,6 @@
 17,CociBari,Ambos,Checar salida,Revisar mi avance personal;Reportar tareas no cumplidas;,Si,Todos
 18,CociBari,Ambos,Preparar freidora,,No,Miércoles
 19,CociBari,Ambos,Mise En Place Buldack,,No,Miércoles
-20,CociBari,Ambos,Gabinetes superiores,Orden y Limpieza; Rellenar faltantes,No,Miércoles
 1,Cajero,Ambos,Ritual de Apertura,"Contar fondo en caja; Anotar en reporte; Abrir Poster; Revisar tapioca, Cocer tapioca; Revisar contenedor de tapioca explosiva; Lavar y cambiar contenedor de tapioca si es necesario",No,Todos
 2,Cajero,Ambos,Limpieza inicial cajero,Barrer y trapear área interna;Limpieza de Barra Café;Rellenado y acomodo de vitrinas;Limpieza de vitrina,No,Todos
 3,Cajero,Ambos,Corte de caja,"Contar efectivo;Anotar en reporte;Efectivo en sobre;Voucher y Roodsipesos en Sobre; Meter sobre a caja negra;Dejar 2,000 cambio;Cerrar Poster",Si,Todos

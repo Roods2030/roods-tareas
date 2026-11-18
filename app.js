@@ -422,7 +422,14 @@ function loadLocalDatabase() {
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - 3);
         const cutoffStr = formatDateString(cutoff);
-        dailyTasks = loadedTasks.filter(t => t.date >= cutoffStr);
+        // Deduplicate by ID
+        const taskMap = new Map();
+        loadedTasks.forEach(t => {
+            if (t && t.id && t.date >= cutoffStr) {
+                taskMap.set(String(t.id), t);
+            }
+        });
+        dailyTasks = Array.from(taskMap.values());
     } catch (e) {
         console.error("Error loading daily tasks, resetting:", e);
         dailyTasks = [];
@@ -758,6 +765,18 @@ async function pushToCloudTable(tableName, data) {
             payload = payload.filter(a => a && a.employee_id && validEmpIds.has(Number(a.employee_id)));
             if (payload.length === 0) return;
         }
+
+        // Deduplicate payload by unique ID to prevent PostgreSQL "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        const uniqueMap = new Map();
+        payload.forEach(item => {
+            if (item) {
+                const key = (item.id !== undefined && item.id !== null) ? String(item.id) : JSON.stringify(item);
+                uniqueMap.set(key, item);
+            }
+        });
+        payload = Array.from(uniqueMap.values());
+        if (payload.length === 0) return;
+
         const { error } = await supabaseClient.from(tableName).upsert(payload);
         if (error) throw error;
         setSyncIndicator("Cambio Sincronizado", "");
@@ -1443,7 +1462,7 @@ function generateDailyTasks(dateStr, schedule) {
     const existing = dailyTasks.filter(d => d.date === dateStr);
     const existingIds = new Set(existing.map(d => String(d.id)));
     const existingTaskKeys = new Set(existing.map(d => d.task_name + '|' + d.role_name));
-    const newInstances = [];
+    const newInstancesMap = new Map();
 
     const sanitize = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
 
@@ -1481,7 +1500,7 @@ function generateDailyTasks(dateStr, schedule) {
                 orden: t.Orden !== undefined ? t.Orden : (tIdx + 1)
             };
             dailyTasks.push(instance);
-            newInstances.push(instance);
+            newInstancesMap.set(String(instance.id), instance);
         } else {
             // Reconcile and update existing uncompleted task if template changed
             const existingTask = dailyTasks.find(d => d.date === dateStr && (d.id === deterministicId || (d.task_name === t.Tarea && d.role_name === targetRole)));
@@ -1515,12 +1534,13 @@ function generateDailyTasks(dateStr, schedule) {
                     taskChanged = true;
                 }
                 if (taskChanged) {
-                    newInstances.push(existingTask);
+                    newInstancesMap.set(String(existingTask.id), existingTask);
                 }
             }
         }
     });
 
+    const newInstances = Array.from(newInstancesMap.values());
     if (newInstances.length > 0) {
         saveLocalDatabase();
         pushToCloudTable('roods_daily_tasks', newInstances);
